@@ -1,0 +1,120 @@
+name: VaultBank
+description: '${project.description}'
+prefix: VaultBank
+version: '${project.version}'
+
+main: clre20.vaultBank.VaultBank
+api-version: '26.1.1'
+load: POSTWORLD
+
+authors: [ Clre20 ]
+website: https://github.com/clre20/VaultBank
+
+depend: [ Vault ]
+softdepend: [ HttpHub, Geyser-Spigot, floodgate ]
+
+commands:
+  vaultbank:
+    description: VaultBank 銀行（開啟選單與所有子指令）
+    usage: /vaultbank help
+    aliases: [ vb ]
+  money:
+    description: 查看餘額
+    usage: /money [玩家]
+    permission: vaultbank.balance
+  eco:
+    description: 管理玩家餘額
+    usage: /eco <give|take|set|reset> <玩家> [金額]
+    permission: vaultbank.admin.eco
+  baltop:
+    description: 餘額排行榜（管理員）
+    usage: /baltop [頁]
+    permission: vaultbank.baltop
+  pay:
+    description: 轉帳給其他玩家
+    usage: /pay <玩家> <金額>
+    permission: vaultbank.pay
+
+permissions:
+  vaultbank.*:
+    description: VaultBank 所有權限
+    default: op
+    children:
+      vaultbank.player: true
+      vaultbank.admin: true
+  vaultbank.player:
+    description: 一般玩家的所有權限
+    default: true
+    children:
+      vaultbank.use: true
+      vaultbank.balance: true
+      vaultbank.pay: true
+      vaultbank.paytoggle: true
+      vaultbank.deposit: true
+      vaultbank.withdraw: true
+      vaultbank.cheque: true
+      vaultbank.log: true
+  vaultbank.admin:
+    description: 管理員的所有權限
+    default: op
+    children:
+      vaultbank.balance.others: true
+      vaultbank.baltop: true
+      vaultbank.log.others: true
+      vaultbank.admin.eco: true
+      vaultbank.admin.give: true
+      vaultbank.admin.audit: true
+      vaultbank.admin.alert: true
+      vaultbank.reload: true
+      vaultbank.version: true
+  vaultbank.use:
+    description: 打開銀行選單（/vb）
+    default: true
+  vaultbank.balance:
+    description: 查看自己的餘額
+    default: true
+  vaultbank.balance.others:
+    description: 查看其他玩家的餘額
+    default: op
+  vaultbank.pay:
+    description: 轉帳
+    default: true
+  vaultbank.paytoggle:
+    description: 開關是否接受別人轉帳
+    default: true
+  vaultbank.baltop:
+    description: 查看餘額排行榜（玩家只能在 /money 與 /vb 選單看到自己的排名）
+    default: op
+  vaultbank.deposit:
+    description: 存入實體貨幣與支票
+    default: true
+  vaultbank.withdraw:
+    description: 提取實體貨幣
+    default: true
+  vaultbank.cheque:
+    description: 開支票
+    default: true
+  vaultbank.log:
+    description: 查看自己的交易紀錄
+    default: true
+  vaultbank.log.others:
+    description: 查看其他玩家的交易紀錄
+    default: op
+  vaultbank.admin.eco:
+    description: 給予、扣除、設定、重設玩家餘額
+    default: op
+  vaultbank.admin.give:
+    description: 直接發放實體貨幣（不扣款）
+    default: op
+  vaultbank.admin.audit:
+    description: 查看貨幣流通量與支票統計
+    default: op
+  vaultbank.admin.alert:
+    description: 收到偽造貨幣、重複兌現支票、流通量異常的警告
+    default: op
+  vaultbank.reload:
+    description: 重新載入設定與材質包
+    default: op
+  vaultbank.version:
+    description: 查看版本並檢查更新，有新版時登入會收到提醒
+    default: op

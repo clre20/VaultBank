@@ -1,0 +1,129 @@
+# VaultBank 設定檔
+# 缺少的項目會在啟動與 /vb reload 時自動補上，保留你原本的值（補之前會備份成 config.yml.bak）。
+config-version: 1
+
+# ---------- 貨幣 ----------
+currency:
+  # 銀行餘額的小數位數（0～4）。實體貨幣與支票只能是整數。
+  decimal-places: 2
+  # 新玩家的起始餘額
+  default-balance: 0
+  # 單一帳戶的餘額上限
+  max-balance: 10000000000000
+
+# 個別面額是否可以提取（關掉後仍可存入已經發出去的）
+denominations:
+  coin-1: true
+  coin-5: true
+  coin-10: true
+  coin-50: true
+  note-100: true
+  note-500: true
+  note-1000: true
+
+# ---------- 存檔 ----------
+storage:
+  # 餘額變動後幾秒內寫入資料庫（批次寫入，1～300）
+  save-interval-seconds: 5
+
+# ---------- 排行榜 ----------
+baltop:
+  # 幾秒重新排序一次
+  update-interval-seconds: 300
+  # 聊天室每頁幾名（/baltop）
+  page-length: 10
+  # 餘額至少多少才列入排行榜
+  min-balance: 0.01
+
+# ---------- 轉帳 ----------
+pay:
+  # 最低轉帳金額
+  min-amount: 0.01
+  # 手續費（百分比，由付款人另外支付；0 = 不收）
+  fee-percent: 0
+
+# ---------- 提取 ----------
+withdraw:
+  # 一次最多提取幾枚／張（上限 2304 = 36 格 × 64）
+  max-items: 2304
+
+# ---------- 支票 ----------
+cheque:
+  # 最低面額（整數）
+  min-amount: 1
+  # 最高面額（0 = 不限制）
+  max-amount: 0
+  # 手續費（百分比，由開票人另外支付；0 = 不收）
+  fee-percent: 0
+
+# ---------- 利息 ----------
+interest:
+  enabled: false
+  # 每次發放的利率（百分比）
+  rate-percent: 0.1
+  # 幾小時發放一次（以第一次開啟時開始計時，重啟不會重發）
+  interval-hours: 24
+  # 每人每次最多發多少（0 = 不限制）
+  max-per-payout: 0
+  # 只發給發放當下在線的玩家
+  online-only: true
+
+# ---------- 交易紀錄 ----------
+logs:
+  enabled: true
+  # 保留天數，超過的每小時自動刪除
+  retention-days: 30
+  # 記錄其他插件透過 Vault 的存提（例如商店、在線獎勵）
+  log-plugin-transactions: true
+  # 聊天室每頁幾筆（/vb log <頁>）
+  page-size: 10
+
+# ---------- 防偽 ----------
+anti-counterfeit:
+  # 有人存入偽造貨幣、已兌現的支票，或貨幣回收量超過發行量時，通知線上有 vaultbank.admin.alert 權限的人
+  alert-admins: true
+  # 偽造貨幣與已兌現的支票直接沒收（false = 退回給玩家）
+  confiscate-invalid: false
+
+# ---------- 材質包 ----------
+resource-pack:
+  java:
+    enabled: true
+    # 玩家必須接受材質包才能進服
+    required: false
+    # 沒有安裝 HttpHub 時，自己架設 plugins/VaultBank/pack/VaultBank-java.zip 的網址（例如 https://example.com/VaultBank-java.zip）
+    url: ""
+    # 玩家登入後幾 tick 發送（20 tick = 1 秒）
+    delay-ticks: 20
+  bedrock:
+    # 自動把 .mcpack 與自訂物品對照檔放進 Geyser 的資料夾（Geyser 重啟後生效）
+    enabled: true
+    # Geyser 資料夾；留空 = 自動找 plugins/Geyser-Spigot
+    geyser-folder: ""
+  # Java 版 3D 模型厚度（一格方塊 = 16）
+  model:
+    coin-thickness: 1.5
+    note-thickness: 0.5
+    cheque-thickness: 0.5
+    cheque-roll-thickness: 2.0
+
+# ---------- 介面 ----------
+gui:
+  # 聊天室輸入的逾時秒數
+  chat-input-timeout-seconds: 60
+  # 同一玩家存入、提取、開支票、查交易紀錄的最短間隔（毫秒，0 = 不限制），避免洗指令
+  action-cooldown-ms: 500
+  # 基岩版玩家從一個介面換到另一個介面時，先關閉再等幾 tick 打開（太短時基岩版會把介面立刻關掉）
+  bedrock-open-delay-ticks: 6
+
+# ---------- 匯入 ----------
+migration:
+  # 第一次啟動時匯入 plugins/TheosisEconomy/player-accounts 的餘額（只匯入一次，不改動原檔）
+  import-theosis-economy: true
+
+# ---------- 更新檢查 ----------
+update-checker:
+  # 啟動時在背景向 GitHub Releases 檢查一次
+  check-on-startup: true
+  # 有新版本時，擁有 vaultbank.version 權限的人登入 3 秒後收到提醒
+  notify-on-join: true
