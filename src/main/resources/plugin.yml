@@ -11,7 +11,7 @@ authors: [ Clre20 ]
 website: https://github.com/clre20/VaultBank
 
 depend: [ Vault ]
-softdepend: [ HttpHub, Geyser-Spigot, floodgate ]
+softdepend: [ HttpHub, Geyser-Spigot, floodgate, PlaceholderAPI, ExcellentEconomy ]
 
 commands:
   vaultbank:
@@ -24,15 +24,15 @@ commands:
     permission: vaultbank.balance
   eco:
     description: 管理玩家餘額
-    usage: /eco <give|take|set|reset> <玩家> [金額]
+    usage: /eco <give|take|set|reset> <玩家> [金額] [幣種]
     permission: vaultbank.admin.eco
   baltop:
     description: 餘額排行榜（管理員）
-    usage: /baltop [頁]
+    usage: /baltop [幣種] [頁]
     permission: vaultbank.baltop
   pay:
     description: 轉帳給其他玩家
-    usage: /pay <玩家> <金額>
+    usage: /pay <玩家> <金額> [幣種]
     permission: vaultbank.pay
 
 permissions:
@@ -53,6 +53,7 @@ permissions:
       vaultbank.deposit: true
       vaultbank.withdraw: true
       vaultbank.cheque: true
+      vaultbank.exchange: true
       vaultbank.log: true
   vaultbank.admin:
     description: 管理員的所有權限
@@ -93,6 +94,9 @@ permissions:
     default: true
   vaultbank.cheque:
     description: 開支票
+    default: true
+  vaultbank.exchange:
+    description: 兌換幣種（config 的 exchange.enabled 也要開）
     default: true
   vaultbank.log:
     description: 查看自己的交易紀錄

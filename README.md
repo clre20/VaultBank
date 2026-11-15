@@ -1,6 +1,6 @@
 # VaultBank
 
-VaultBank 是一款專為 Paper 伺服器設計的經濟插件，可以直接取代 TheosisEconomy。除了一般的銀行餘額、轉帳與排行榜，還加入了中世紀風格的**實體貨幣**（硬幣與鈔票）和**不記名支票**：玩家可以把餘額提領成物品拿去交易、放進箱子、賣給商店，再到銀行存回來。每一枚貨幣都有伺服器簽章，玩家無法偽造。
+VaultBank 是一款專為 Paper 伺服器設計的經濟插件。除了一般的銀行餘額、轉帳與排行榜，還支援**多幣種**與**幣種兌換**，並加入中世紀風格的**實體貨幣**（硬幣與鈔票）和**不記名支票**：玩家可以把餘額提領成物品拿去交易、放進箱子、賣給商店，再到銀行存回來。每一枚貨幣都有伺服器簽章，玩家無法偽造。
 
 ## 功能特性
 
@@ -8,9 +8,21 @@ VaultBank 是一款專為 Paper 伺服器設計的經濟插件，可以直接取
   * 透過 Vault 提供經濟服務，商店、拍賣、在線獎勵等使用 Vault 的插件不用改任何設定。
   * 餘額支援小數（預設 2 位）、上限、起始金額；轉帳可設最低金額與手續費。
   * 第一次啟動時自動匯入 TheosisEconomy 的所有帳戶（只讀不改原資料，只匯入一次）。
+* **多幣種**：
+  * 除了 Vault 綁定的「元」，可以在 `config.yml` 的 `currencies` 加入任意幣種，每個幣種有自己的銀行餘額、小數位數、上限、轉帳與支票規則、利率。
+  * 每個幣種各自開關：轉帳、支票、利息、排行榜、實體貨幣。
+  * 內建**企鵝幣**（預設停用）：一枚 1 企鵝幣，外觀是壓印企鵝的古銀幣 3D 模型。
+  * 可以從 ExcellentEconomy 一次性匯入某個貨幣的所有餘額（SQLite 直接唯讀讀取，MySQL 時透過它的 API）。
+  * 其他插件可透過 `VaultBankAPI` 服務使用任何幣種，例如 [AetherMart](https://github.com/clre20/AetherMart) 的 `type: vaultbank`。
+* **幣種兌換**（預設停用）：
+  * 每組可設定能不能反方向換（`allow-reverse`）；預設的 元 → 企鵝幣 只能單向，企鵝幣不能換回元。
+  * **固定匯率**，或**浮動匯率**：全服兌換會推動匯率，沒人換時慢慢回到基準；匯率有上下限，可收手續費。
+  * 浮動匯率用恆定乘積計算，拆成很多筆或來回兌換都不會多賺。
+  * `/vb exchange` 介面先報價、再確認；確認前匯率變差會重新報價。
+* **PlaceholderAPI**：`%vaultbank_balance_<幣種>%`、`%vaultbank_balance_formatted_<幣種>%`、`%vaultbank_rank_<幣種>%`、`%vaultbank_rate_<付出>_<換到>%`、`%vaultbank_currency_<幣種>%`（省略幣種＝元）。
 * **實體貨幣**：
   * 硬幣：1 元銅幣、5 元鐵幣、10 元銀幣、50 元金幣；鈔票：100 元綠鈔、500 元藍鈔、1000 元紫鈔。
-  * 同面額的每一枚完全相同，可以堆疊，村民與交易插件（例如 Shopkeepers）都視為同一個物品。
+  * 同面額的每一枚完全相同，可以堆疊，都視為同一個物品。
   * 提取時可以讓**系統自動配**（最大面額優先），也可以**自己選面額與數量**，背包放不下會直接提示。
 * **不記名支票**：
   * 從餘額開出任意整數金額的支票，任何人拿到都能到銀行兌現。
@@ -22,9 +34,10 @@ VaultBank 是一款專為 Paper 伺服器設計的經濟插件，可以直接取
 * **3D 外觀材質包**：
   * Java 版：貨幣、鈔票與支票都是有厚度的 3D 模型，經 [HttpHub](https://github.com/clre20/HttpHub) 以獨立的材質包發送，不會蓋掉其他插件的材質包。
   * 基岩版：自動產生 `.mcpack` 與 Geyser 自訂物品對照檔，放進 Geyser 資料夾。
-  * 貼圖放在 `plugins/VaultBank/textures/`，換成自己的 PNG 後 `/vb reload` 即可。
+  * 外觀放在 `plugins/VaultBank/textures/`，檔名用面額 id：**模型** `<id>.json`（例如 Blockbench 匯出）優先，其次**圖片** `<id>.png`（自動加厚度），都沒有就用設定的**原版物品外觀**；改完 `/vb reload`。
 * **箱子介面**：
-  * `/vb` 打開銀行：存入、提取、開支票、轉帳、交易紀錄、收款開關，並顯示自己的餘額與排名。
+  * `/vb` 打開銀行：存入、提取、開支票、轉帳、兌換、交易紀錄、收款開關，並顯示每個幣種的餘額與排名。
+  * 所有幣種共用一個存入介面，丟進去的貨幣與支票各自存到對應的幣種。
   * 介面能做的事都有對應的指令。
   * 基岩版玩家（Geyser／Floodgate）的介面也有貨幣圖示；要輸入金額時跳出基岩版輸入框，不用聊天室。
 * **交易紀錄**：
@@ -48,18 +61,20 @@ VaultBank 是一款專為 Paper 伺服器設計的經濟插件，可以直接取
 | `/vb` 或 `/vb menu` | 打開銀行選單 | 遊戲內 | `vaultbank.use` | 所有人 |
 | `/vb help` | 顯示指令說明 | 遊戲內 / 控制台 | 無 | 所有人 |
 | `/vb balance [玩家]`、`/money [玩家]` | 查看自己（或他人）的餘額與排名 | 遊戲內 / 控制台 | `vaultbank.balance`（他人：`vaultbank.balance.others`） | 所有人（他人：OP） |
-| `/vb pay <玩家> <金額>`、`/pay` | 轉帳（可轉給離線玩家） | 遊戲內 | `vaultbank.pay` | 所有人 |
+| `/vb pay <玩家> <金額> [幣種]`、`/pay` | 轉帳（可轉給離線玩家） | 遊戲內 | `vaultbank.pay` | 所有人 |
 | `/vb paytoggle` | 開關是否接受別人轉帳 | 遊戲內 | `vaultbank.paytoggle` | 所有人 |
-| `/vb baltop [頁]`、`/baltop` | 餘額排行榜（玩家只看得到自己的排名，在 `/money` 與 `/vb` 選單） | 遊戲內 / 控制台 | `vaultbank.baltop` | OP |
+| `/vb baltop [幣種] [頁]`、`/baltop` | 餘額排行榜（玩家只看得到自己的排名，在 `/money` 與 `/vb` 選單） | 遊戲內 / 控制台 | `vaultbank.baltop` | OP |
 | `/vb deposit [hand\|all]` | 存入手上或背包裡的貨幣與支票；不加參數開啟存入介面 | 遊戲內 | `vaultbank.deposit` | 所有人 |
-| `/vb withdraw [金額]` | 系統自動配面額提取；不加參數開啟提取介面 | 遊戲內 | `vaultbank.withdraw` | 所有人 |
-| `/vb withdraw <面額> <數量>` | 指定面額提取，例如 `/vb withdraw 100 5` | 遊戲內 | `vaultbank.withdraw` | 所有人 |
-| `/vb cheque [金額]` | 開支票；不加金額時在聊天室輸入 | 遊戲內 | `vaultbank.cheque` | 所有人 |
+| `/vb withdraw [金額] [幣種]` | 系統自動配面額提取；不加參數開啟提取介面（`/vb withdraw <幣種>` 開該幣種） | 遊戲內 | `vaultbank.withdraw` | 所有人 |
+| `/vb withdraw <面額> <數量> [幣種]` | 指定面額提取，例如 `/vb withdraw 100 5`、`/vb withdraw 1 20 penguin` | 遊戲內 | `vaultbank.withdraw` | 所有人 |
+| `/vb cheque [金額] [幣種]` | 開支票；不加金額時在聊天室輸入 | 遊戲內 | `vaultbank.cheque` | 所有人 |
+| `/vb exchange [<付出> <換到> <數量>]` | 兌換幣種；不加參數開啟兌換介面 | 遊戲內 | `vaultbank.exchange` | 所有人 |
+| `/vb exchange rates` | 查看目前匯率 | 遊戲內 / 控制台 | `vaultbank.exchange` | 所有人 |
 | `/vb log [頁]` | 自己的交易紀錄 | 遊戲內 | `vaultbank.log` | 所有人 |
 | `/vb log <玩家> [頁]` | 他人的交易紀錄 | 遊戲內 / 控制台 | `vaultbank.log.others` | OP |
-| `/vb eco <give\|take\|set\|reset> <玩家> [金額]`、`/eco` | 管理玩家餘額 | 遊戲內 / 控制台 | `vaultbank.admin.eco` | OP |
-| `/vb give <玩家> <面額> [數量]` | 直接發放實體貨幣（不扣款） | 遊戲內 / 控制台 | `vaultbank.admin.give` | OP |
-| `/vb audit` | 貨幣流通量、未兌現支票、全服餘額統計 | 遊戲內 / 控制台 | `vaultbank.admin.audit` | OP |
+| `/vb eco <give\|take\|set\|reset> <玩家> [金額] [幣種]`、`/eco` | 管理玩家餘額 | 遊戲內 / 控制台 | `vaultbank.admin.eco` | OP |
+| `/vb give <玩家> <面額> [數量]` | 直接發放實體貨幣（不扣款）；其他幣種用面額名稱，例如 `penguin_1` | 遊戲內 / 控制台 | `vaultbank.admin.give` | OP |
+| `/vb audit [幣種]` | 各幣種的貨幣流通量、未兌現支票、全服餘額統計 | 遊戲內 / 控制台 | `vaultbank.admin.audit` | OP |
 | `/vb reload` | 重新載入設定、文字與材質包 | 遊戲內 / 控制台 | `vaultbank.reload` | OP |
 | `/vb version` | 查看版本並檢查更新，有新版時登入會收到提醒 | 遊戲內 / 控制台 | `vaultbank.version` | OP |
 
@@ -70,12 +85,24 @@ VaultBank 是一款專為 Paper 伺服器設計的經濟插件，可以直接取
 1. 需要 [Vault](https://www.spigotmc.org/resources/vault.34315/)。要發送 Java 版材質包請安裝 [HttpHub](https://github.com/clre20/HttpHub)；基岩版玩家需要 Geyser。
 2. **從 TheosisEconomy 換過來**：關服 → 移除 TheosisEconomy 的 jar（`plugins/TheosisEconomy/` 資料夾留著）→ 放入 VaultBank → 開服。後台會顯示匯入了幾個帳戶與總額。TheosisEconomy 還裝著的話，VaultBank 不會接手經濟並在後台提示。
 3. 如果有 EssentialsX，請關閉它的 `/money`、`/eco`、`/baltop`、`/pay`，或在 `commands.yml` 把這些指令指到 VaultBank。
-4. 基岩版：第一次啟動後重開一次伺服器，Geyser 才會載入 VaultBank 的材質包與自訂物品。
+4. 基岩版：第一次啟動後重開一次伺服器，Geyser 才會載入 VaultBank 的材質包與自訂物品（新增幣種或面額後也一樣）。
+5. **從 ExcellentEconomy 換過來**：在 `currencies.<幣種>.import.excellent-economy` 填 ExcellentEconomy 的貨幣 id，把該幣種 `enabled` 改成 `true`，`/vb reload`。後台顯示匯入結果後移除 ExcellentEconomy（它在的時候也會搶 `/money`、`/pay`）。每個幣種只匯入一次。
+
+```yaml
+# config.yml：啟用企鵝幣並從 ExcellentEconomy 的 penguin 匯入
+currencies:
+  penguin:
+    enabled: true
+    import:
+      excellent-economy: "penguin"
+```
 
 | 設定 | 說明 |
 | :--- | :--- |
 | `currency.decimal-places` / `default-balance` / `max-balance` | 小數位數、起始金額、餘額上限 |
-| `denominations.*` | 個別面額是否可以提取 |
+| `denominations.*` | 「元」的個別面額是否可以提取 |
+| `currencies.<幣種>.*` | 其他幣種：開關、小數、上限、功能開關、轉帳／支票／利息規則、ExcellentEconomy 匯入、面額與外觀 |
+| `exchange.*` | 兌換開關、手續費、每組兌換的固定或浮動匯率 |
 | `storage.save-interval-seconds` | 餘額批次寫入的間隔 |
 | `baltop.*` | 排行榜更新間隔、每頁人數、最低上榜金額 |
 | `pay.min-amount` / `fee-percent` | 最低轉帳金額、轉帳手續費 |
@@ -104,11 +131,14 @@ VaultBank is an economy plugin for Paper and a drop-in replacement for TheosisEc
 
 ## Features
 
+* **Multiple currencies**: besides the Vault-bound yuan, add any currency under `currencies`, each with its own bank balance, decimals, cap, payment/cheque/interest rules and per-feature toggles. A **penguin coin** (disabled by default) ships with an embossed ancient-silver 3D model. Balances can be imported once from ExcellentEconomy. Other plugins use any currency through the `VaultBankAPI` service (for example AetherMart's `type: vaultbank`).
+* **Currency exchange** (disabled by default): each pair can be one-way (`allow-reverse: false`; the default yuan → penguin pair cannot be exchanged back); fixed rates, or floating rates driven by server-wide trading (constant-product, so splitting or round-tripping trades never profits), with rate limits, fees and re-quoting before confirmation.
+* **PlaceholderAPI**: `%vaultbank_balance_<currency>%`, `%vaultbank_balance_formatted_<currency>%`, `%vaultbank_rank_<currency>%`, `%vaultbank_rate_<from>_<to>%`.
 * **Full economy plugin**: provides Vault economy, so shops and other Vault plugins work unchanged; decimal balances (2 places by default), balance cap, starting balance, minimum payment and payment fee; imports every TheosisEconomy account on first start (read-only, once).
 * **Physical money**: coins of 1 (copper), 5 (iron), 10 (silver) and 50 (gold); banknotes of 100 (green), 500 (blue) and 1000 (purple). Coins of the same value are identical and stack, so villagers and trading plugins treat them as the same item. Withdraw by letting the teller split the amount automatically, or pick denominations yourself.
 * **Bearer cheques**: any whole amount; each has a unique serial and can be cashed only once.
 * **Anti-counterfeit**: items are signed with a server key; minted and redeemed counts per denomination are tracked and admins are alerted when more is redeemed than was minted; saves are ordered so a crash never leaves both the money and the items.
-* **3D resource pack**: Java models with thickness, delivered as a separate pack through [HttpHub](https://github.com/clre20/HttpHub); a Bedrock `.mcpack` and Geyser custom item mappings are generated and installed automatically. Textures can be replaced in `plugins/VaultBank/textures/`.
+* **3D resource pack**: Java models with thickness, delivered as a separate pack through [HttpHub](https://github.com/clre20/HttpHub); a Bedrock `.mcpack` and Geyser custom item mappings are generated and installed automatically. Each denomination's look is a model (`<id>.json`), an image extruded to 3D (`<id>.png`) or a vanilla item, in that order, from `plugins/VaultBank/textures/`.
 * **Chest GUI**: `/vb` opens the bank (deposit, withdraw, cheque, pay, history, payment toggle) and shows your balance and rank; the full leaderboard `/baltop` is admin-only; every GUI action also has a command.
 * **Transaction history**: kept 30 days by default, including Vault deposits and withdrawals by other plugins (with the plugin name).
 * **Performance**: balances live in memory and are written to SQLite in batches every 5 seconds on one background thread; Vault calls are safe from any thread.

@@ -1,12 +1,16 @@
 package clre20.vaultBank.config;
 
 import clre20.vaultBank.VaultBank;
-import clre20.vaultBank.currency.Denomination;
+import clre20.vaultBank.currency.Currencies;
+import clre20.vaultBank.currency.Currency;
+import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.YamlConfiguration;
 
 import java.math.BigDecimal;
-import java.util.EnumSet;
-import java.util.Set;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 /** config.yml：讀取時一律有預設值，數值超出範圍時夾回合理範圍。 */
 public final class PluginConfig {
@@ -18,7 +22,12 @@ public final class PluginConfig {
     private int decimalPlaces;
     private BigDecimal defaultBalance;
     private BigDecimal maxBalance;
-    private Set<Denomination> enabledDenominations = EnumSet.allOf(Denomination.class);
+    private Currencies currencies;
+
+    // 兌換
+    private boolean exchangeEnabled;
+    private BigDecimal exchangeFeePercent;
+    private List<ExchangePair> exchangePairs = List.of();
 
     // 存檔
     private int saveIntervalSeconds;
@@ -97,13 +106,10 @@ public final class PluginConfig {
         if (maxBalance.signum() <= 0) {
             maxBalance = new BigDecimal("10000000000000");
         }
-        Set<Denomination> enabled = EnumSet.noneOf(Denomination.class);
-        for (Denomination d : Denomination.values()) {
-            if (c.getBoolean("denominations." + d.configKey(), true)) {
-                enabled.add(d);
-            }
+        Map<String, Boolean> enabledDenoms = new HashMap<>();
+        for (String id : Currencies.primaryDenominationIds()) {
+            enabledDenoms.put(id, c.getBoolean("denominations." + id.replace('_', '-'), true));
         }
-        enabledDenominations = enabled;
 
         saveIntervalSeconds = clamp(c.getInt("storage.save-interval-seconds", 5), 1, 300);
 
@@ -151,11 +157,59 @@ public final class PluginConfig {
 
         importTheosis = c.getBoolean("migration.import-theosis-economy", true);
 
+        Currency primary = Currencies.primaryCurrency(decimalPlaces, defaultBalance, maxBalance, payMinAmount,
+                payFeePercent, chequeMinAmount, chequeMaxAmount, chequeFeePercent, interestRatePercent, interestMaxPerPayout);
+        currencies = Currencies.build(primary, enabledDenoms, c.getConfigurationSection("currencies"),
+                coinThickness, noteThickness,
+                (key, why) -> plugin.getLogger().warning("config.yml " + key + "：" + why));
+
+        exchangeEnabled = c.getBoolean("exchange.enabled", false);
+        exchangeFeePercent = percent(dec(c, "exchange.fee-percent", "0"));
+        List<ExchangePair> pairs = new ArrayList<>();
+        ConfigurationSection ps = c.getConfigurationSection("exchange.pairs");
+        if (ps != null) {
+            for (String name : ps.getKeys(false)) {
+                ConfigurationSection e = ps.getConfigurationSection(name);
+                if (e == null || !Currencies.CURRENCY_ID.matcher(name.replace("-", "_")).matches()) {
+                    continue;
+                }
+                Currency from = currencies.get(e.getString("from", ""));
+                Currency to = currencies.get(e.getString("to", ""));
+                BigDecimal rate = dec(e, "rate", "0");
+                if (from == null || to == null || from == to || rate.signum() <= 0) {
+                    plugin.getLogger().warning("config.yml exchange.pairs." + name + "：from／to 要是不同的幣種，rate 要大於 0，已略過");
+                    continue;
+                }
+                boolean floating = e.getString("mode", "fixed").trim().equalsIgnoreCase("floating");
+                BigDecimal min = dec(e, "floating.min-rate", "0");
+                BigDecimal maxRate = dec(e, "floating.max-rate", "0");
+                pairs.add(new ExchangePair(name, from.id(), to.id(), floating, rate,
+                        dec(e, "floating.liquidity", "100000").max(BigDecimal.ONE),
+                        clampD(e.getDouble("floating.recover-percent-per-hour", 5), 0, 100),
+                        min.signum() > 0 ? min : rate.divide(BigDecimal.TEN),
+                        maxRate.signum() > 0 ? maxRate : rate.multiply(BigDecimal.TEN),
+                        e.getBoolean("allow-reverse", true)));
+            }
+        }
+        exchangePairs = List.copyOf(pairs);
+
         updateCheckOnStartup = c.getBoolean("update-checker.check-on-startup", true);
         updateNotifyOnJoin = c.getBoolean("update-checker.notify-on-join", true);
     }
 
-    private static BigDecimal dec(YamlConfiguration c, String path, String fallback) {
+    /**
+     * 一組兌換：1 from ＝ rate to（兩個方向都能換）。
+     *
+     * @param liquidity 浮動匯率的深度（以 to 幣計），越大匯率越不容易被推動
+     * @param recoverPercentPerHour 沒有交易時，每小時回到基準匯率的比例
+     * @param allowReverse 能不能反方向換（to → from）
+     */
+    public record ExchangePair(String name, String from, String to, boolean floating, BigDecimal rate,
+                               BigDecimal liquidity, double recoverPercentPerHour, BigDecimal minRate, BigDecimal maxRate,
+                               boolean allowReverse) {
+    }
+
+    private static BigDecimal dec(ConfigurationSection c, String path, String fallback) {
         Object v = c.get(path);
         try {
             if (v != null) {
@@ -193,7 +247,10 @@ public final class PluginConfig {
     public int decimalPlaces() { return decimalPlaces; }
     public BigDecimal defaultBalance() { return defaultBalance; }
     public BigDecimal maxBalance() { return maxBalance; }
-    public boolean denominationEnabled(Denomination d) { return enabledDenominations.contains(d); }
+    public Currencies currencies() { return currencies; }
+    public boolean exchangeEnabled() { return exchangeEnabled; }
+    public BigDecimal exchangeFeePercent() { return exchangeFeePercent; }
+    public List<ExchangePair> exchangePairs() { return exchangePairs; }
     public int saveIntervalSeconds() { return saveIntervalSeconds; }
     public int baltopIntervalSeconds() { return baltopIntervalSeconds; }
     public int baltopPageLength() { return baltopPageLength; }

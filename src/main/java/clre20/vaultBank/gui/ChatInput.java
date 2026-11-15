@@ -40,13 +40,14 @@ public final class ChatInput implements Listener {
      * @param promptKey messages.yml 的提示訊息鍵
      * @param onInput   在主執行緒收到輸入
      * @param onCancel  取消或逾時後（主執行緒），可為 null
+     * @param vars      提示訊息的變數（例如 currency）
      */
-    public void ask(Player player, String promptKey, BiConsumer<Player, String> onInput, Runnable onCancel) {
+    public void ask(Player player, String promptKey, BiConsumer<Player, String> onInput, Runnable onCancel, Object... vars) {
         UUID id = player.getUniqueId();
         cancel(id);
         player.closeInventory();
         // 基岩版玩家在 enforce-secure-profile 開啟時不能聊天，改用 Floodgate 的輸入框
-        if (askForm(player, promptKey, onInput, onCancel)) {
+        if (askForm(player, promptKey, onInput, onCancel, vars)) {
             return;
         }
         int seconds = plugin.config().chatInputTimeoutSeconds();
@@ -60,11 +61,17 @@ public final class ChatInput implements Listener {
             }
         }, seconds * 20L);
         pending.put(id, new Pending(onInput, onCancel, task));
-        plugin.messages().send(player, promptKey, "seconds", seconds, "cancel", plugin.messages().plain("input.cancel-word"));
+        Object[] all = java.util.Arrays.copyOf(vars, vars.length + 4);
+        all[vars.length] = "seconds";
+        all[vars.length + 1] = seconds;
+        all[vars.length + 2] = "cancel";
+        all[vars.length + 3] = plugin.messages().plain("input.cancel-word");
+        plugin.messages().send(player, promptKey, all);
     }
 
     /** 基岩版：送出輸入框。回傳 false 表示不是基岩版或送不出去，改用聊天室。 */
-    private boolean askForm(Player player, String promptKey, BiConsumer<Player, String> onInput, Runnable onCancel) {
+    private boolean askForm(Player player, String promptKey, BiConsumer<Player, String> onInput, Runnable onCancel,
+                            Object[] vars) {
         if (!floodgate()) {
             return false;
         }
@@ -81,7 +88,7 @@ public final class ChatInput implements Listener {
                 }
                 boolean sent;
                 try {
-                    sent = sendForm(id, key, onInput, onCancel);
+                    sent = sendForm(id, key, onInput, onCancel, vars);
                 } catch (Throwable t) {
                     plugin.getLogger().warning(plugin.messages().console("form-failed", "reason", String.valueOf(t)));
                     sent = false;
@@ -97,11 +104,11 @@ public final class ChatInput implements Listener {
         }
     }
 
-    private boolean sendForm(UUID id, String key, BiConsumer<Player, String> onInput, Runnable onCancel) {
+    private boolean sendForm(UUID id, String key, BiConsumer<Player, String> onInput, Runnable onCancel, Object[] vars) {
         return FormBridge.ask(id,
                 plugin.messages().plain("input.form.title"),
-                plugin.messages().plain(key + ".label"),
-                plugin.messages().plain(key + ".placeholder"),
+                plugin.messages().plain(key + ".label", vars),
+                plugin.messages().plain(key + ".placeholder", vars),
                 text -> Bukkit.getScheduler().runTask(plugin, () -> {
                     Player p = Bukkit.getPlayer(id);
                     if (p == null) {

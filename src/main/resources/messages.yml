@@ -7,10 +7,18 @@ prefix: "&8[&6VaultBank&8] &7"
 no-permission: "&c你沒有權限這麼做。"
 
 currency:
-  # 金額顯示格式（{amount} 已含千分位）
+  # 「元」的金額顯示格式（{amount} 已含千分位）
   format: "{amount} 元"
   name-singular: "元"
   name-plural: "元"
+  # 其他幣種沒有設定 format 時用這個
+  generic-format: "{amount} {currency}"
+
+# 其他幣種的名稱與金額格式（鍵是 config.yml currencies 裡的幣種 id）
+currencies:
+  penguin:
+    name: "企鵝幣"
+    format: "{amount} 企鵝幣"
 
 # ---------- 物品 ----------
 items:
@@ -49,13 +57,24 @@ items:
     lore:
       - "&7王國銀行發行的鈔票"
       - "&8到銀行（/vb）存入即可入帳"
+  penguin_1:
+    name: "&b企鵝幣"
+    lore:
+      - "&7冰原部落敲製的古銀幣"
+      - "&7正面壓印著一隻企鵝"
+      - "&8到銀行（/vb）存入即可入帳"
+  # 其他幣種的面額沒有在上面設定名稱時用這個（{value} 面額、{currency} 幣種名稱）
+  generic-money:
+    name: "&f{value} {currency}"
+    lore:
+      - "&8到銀行（/vb）存入即可入帳"
   cheque:
-    name: "&c支票 &f{amount} 元"
+    name: "&c支票 &f{money}"
     # 基岩版物品清單上顯示的名稱
     bedrock-name: "支票"
     date-format: "yyyy-MM-dd HH:mm"
     lore:
-      - "&7面額：&f{amount} 元"
+      - "&7面額：&f{money}"
       - "&7開票人：&f{issuer}"
       - "&7開票時間：&f{date}"
       - "&8編號 {serial}"
@@ -76,19 +95,23 @@ error:
   not-online: "&c玩家 &e{player} &c不在線上。"
   invalid-amount: "&c「{input}」不是有效的金額。"
   too-many-decimals: "&c金額最多只能有 {digits} 位小數。"
+  whole-number: "&c{currency}只能用整數。"
   insufficient: "&c餘額不足，目前餘額 &e{balance}&c。"
   no-space: "&c背包空間不足。"
   failed: "&c操作失敗，請稍後再試。"
   too-fast: "&c操作太快了，請稍等一下。"
+  unknown-currency: "&c沒有「{input}」這個幣種，可用：{list}。"
+  currency-disabled: "&c{currency}目前停用。"
 
 usage:
-  pay: "&c用法：&e/pay <玩家> <金額>"
-  baltop: "&c用法：&e/baltop [頁]"
+  pay: "&c用法：&e/pay <玩家> <金額> [幣種]"
+  baltop: "&c用法：&e/baltop [幣種] [頁]"
   deposit: "&c用法：&e/vb deposit [hand|all]"
-  withdraw: "&c用法：&e/vb withdraw [金額] &c或 &e/vb withdraw <面額> <數量>"
-  cheque: "&c用法：&e/vb cheque [金額]"
+  withdraw: "&c用法：&e/vb withdraw [金額] [幣種] &c或 &e/vb withdraw <面額> <數量> [幣種]"
+  cheque: "&c用法：&e/vb cheque [金額] [幣種]"
+  exchange: "&c用法：&e/vb exchange <付出的幣種> <換到的幣種> <付出的數量> &c或 &e/vb exchange rates"
   log: "&c用法：&e/vb log [頁] &c或 &e/vb log <玩家> [頁]"
-  eco: "&c用法：&e/eco <give|take|set|reset> <玩家> [金額]"
+  eco: "&c用法：&e/eco <give|take|set> <玩家> <金額> [幣種] &c或 &e/eco reset <玩家> [幣種]"
   give: "&c用法：&e/vb give <玩家> <面額> [數量]"
 
 help:
@@ -96,16 +119,17 @@ help:
   help: "&e/vb help &7- 顯示這份說明"
   menu: "&e/vb &7- 打開銀行選單"
   balance: "&e/vb balance [玩家] &7或 &e/money &7- 查看餘額與排名"
-  pay: "&e/vb pay <玩家> <金額> &7或 &e/pay &7- 轉帳"
+  pay: "&e/vb pay <玩家> <金額> [幣種] &7或 &e/pay &7- 轉帳"
   paytoggle: "&e/vb paytoggle &7- 開關是否接受別人轉帳"
-  baltop: "&e/vb baltop [頁] &7或 &e/baltop &7- 餘額排行榜（管理員）"
+  baltop: "&e/vb baltop [幣種] [頁] &7或 &e/baltop &7- 餘額排行榜（管理員）"
   deposit: "&e/vb deposit [hand|all] &7- 存入貨幣與支票（不加參數開啟存入介面）"
-  withdraw: "&e/vb withdraw [金額] &7或 &e<面額> <數量> &7- 提取實體貨幣（不加參數開啟提取介面）"
-  cheque: "&e/vb cheque [金額] &7- 開支票"
+  withdraw: "&e/vb withdraw [金額] [幣種] &7或 &e<面額> <數量> [幣種] &7- 提取實體貨幣（不加參數開啟提取介面）"
+  cheque: "&e/vb cheque [金額] [幣種] &7- 開支票"
+  exchange: "&e/vb exchange [<付出> <換到> <數量>] &7- 兌換幣種（不加參數開啟兌換介面），&e/vb exchange rates &7查匯率"
   log: "&e/vb log [頁] &7- 交易紀錄"
-  eco: "&e/vb eco &7或 &e/eco <give|take|set|reset> <玩家> [金額] &7- 管理餘額"
-  give: "&e/vb give <玩家> <面額> [數量] &7- 直接發放實體貨幣"
-  audit: "&e/vb audit &7- 貨幣流通量與支票統計"
+  eco: "&e/vb eco &7或 &e/eco <give|take|set|reset> <玩家> [金額] [幣種] &7- 管理餘額"
+  give: "&e/vb give <玩家> <面額> [數量] &7- 直接發放實體貨幣（其他幣種用面額名稱，例如 penguin_1）"
+  audit: "&e/vb audit [幣種] &7- 貨幣流通量與支票統計"
   reload: "&e/vb reload &7- 重新載入設定與材質包"
   version: "&e/vb version &7- 查看版本並檢查更新"
 
@@ -116,10 +140,16 @@ reload:
 balance:
   self-ranked: "&7你的餘額：&6{balance} &7（{rank}）"
   other-ranked: "&e{player} &7的餘額：&6{balance} &7（{rank}）"
+  # 有多個幣種時：標題＋每個幣種一行
+  header-self: "&7你的餘額："
+  header-other: "&e{player} &7的餘額："
+  line: "&8- &f{currency}：&6{balance} &7（{rank}）"
+  line-no-rank: "&8- &f{currency}：&6{balance}"
   rank: "第 {rank} 名"
   no-rank: "未上榜"
 
 pay:
+  disabled: "&c{currency}目前不能轉帳。"
   sent: "&a已轉帳 &6{amount} &a給 &e{player}&a。"
   sent-fee: "&a已轉帳 &6{amount} &a給 &e{player}&a，手續費 &6{fee}&a。"
   received: "&a你收到 &e{player} &a轉帳的 &6{amount}&a。"
@@ -131,7 +161,8 @@ pay:
   toggle-off: "&e你現在不接受別人轉帳。"
 
 baltop:
-  header: "&6&l餘額排行榜 &7（第 {page}/{pages} 頁，全服總額 &6{total}&7）"
+  header: "&6&l{currency}排行榜 &7（第 {page}/{pages} 頁，全服總額 &6{total}&7）"
+  disabled: "&c{currency}沒有開放排行榜。"
   entry: "&7{rank}. &f{player} &8- &6{balance}"
   entry-you: "&e{rank}. &e&l{player} &8- &6{balance}"
   empty: "&7目前沒有資料。"
@@ -144,19 +175,22 @@ deposit:
   forged-confiscated: "&c有 {count} 個物品是偽造的，已被沒收。"
   used-cheque: "&c有 {count} 張支票已經兌現過或無效，已退回給你。"
   used-cheque-confiscated: "&c有 {count} 張支票已經兌現過或無效，已被沒收。"
-  over-max: "&c存入後餘額會超過上限 &e{max}&c，物品已退回。"
+  over-max: "&c存入後{currency}餘額會超過上限 &e{max}&c，這個幣種的物品已退回。"
+  disabled: "&c有 {count} 個物品屬於停用的幣種或已移除的面額，已退回。"
 
 withdraw:
   done: "&a已提取 &6{amount}&a（{count} 枚／張），目前餘額 &6{balance}&a。"
   empty: "&c還沒有選擇要提取的貨幣。"
   disabled: "&c有面額目前停止提取。"
+  currency-disabled: "&c{currency}目前不能提取實體貨幣。"
   too-many: "&c一次最多只能提取 {max} 枚／張。"
   invalid-amount: "&c「{input}」不是有效的金額（要是正整數）。"
   invalid-count: "&c「{input}」不是有效的數量（1～{max}）。"
-  unknown-denomination: "&c沒有「{input}」這個面額，可用：1、5、10、50、100、500、1000。"
+  unknown-denomination: "&c沒有「{input}」這個面額，可用：{list}。"
   cannot-split: "&c目前開放的面額湊不出 &e{amount}&c。"
 
 cheque:
+  disabled: "&c{currency}目前不能開支票。"
   issued: "&a已開出一張 &6{amount} &a的支票。"
   issued-fee: "&a已開出一張 &6{amount} &a的支票，手續費 &6{fee}&a。"
   invalid-amount: "&c「{input}」不是有效的支票金額（要是正整數）。"
@@ -172,12 +206,31 @@ eco:
   max: "&c超過餘額上限 &e{max}&c。"
 
 give:
-  done: "&a已發給 &e{player} &a{count} 個 {value} 元。"
+  done: "&a已發給 &e{player} &a{count} 個 {money}。"
+
+exchange:
+  done: "&a已用 &6{pay} &a換到 &6{get}&a。"
+  done-fee: "&a已用 &6{pay} &a換到 &6{get}&a，手續費 &6{fee}&a。"
+  disabled: "&c兌換功能目前沒有開放。"
+  no-pair: "&c{from}不能直接換成{to}。"
+  one-way: "&c{from}不能換回{to}。"
+  invalid-amount: "&c兌換數量無效。"
+  too-small: "&c數量太少，換不到任何{to}。"
+  out-of-range: "&c這筆兌換會讓匯率超出範圍，請換少一點。"
+  max: "&c兌換後{to}的餘額會超過上限。"
+  changed: "&e匯率變了，新的報價：&6{pay} &e→ &6{get}&e，請再確認一次。"
+  rates-header: "&6&l兌換匯率 &7（手續費 {fee}%）"
+  rate-fixed: "&f1 {from} &7= &6{rate} {to} &8｜ &f1 {to} &7= &6{inverse} {from} &8（固定）"
+  rate-floating: "&f1 {from} &7= &6{rate} {to} &8｜ &f1 {to} &7= &6{inverse} {from} &8（浮動，基準 {base}）"
+  # 只能單向換的組（allow-reverse: false）
+  rate-fixed-one-way: "&f1 {from} &7= &6{rate} {to} &8（固定，只能 {from} → {to}）"
+  rate-floating-one-way: "&f1 {from} &7= &6{rate} {to} &8（浮動，基準 {base}，只能 {from} → {to}）"
 
 audit:
   header: "&6&lVaultBank 流通量 &7（發行 = 提取＋管理員發放，回收 = 存入）"
-  line: "&7{value} 元：發行 &f{minted} &7回收 &f{redeemed} &7流通中 &a{outstanding}"
-  line-bad: "&7{value} 元：發行 &f{minted} &7回收 &f{redeemed} &7流通中 &c{outstanding} &c（回收超過發行，可能有人複製）"
+  currency: "&e&l{currency}"
+  line: "&7{money}：發行 &f{minted} &7回收 &f{redeemed} &7流通中 &a{outstanding}"
+  line-bad: "&7{money}：發行 &f{minted} &7回收 &f{redeemed} &7流通中 &c{outstanding} &c（回收超過發行，可能有人複製）"
   money-total: "&7實體貨幣流通總額：&6{amount}"
   cheques: "&7未兌現支票：&f{count} &7張，共 &6{amount}"
   accounts: "&7帳戶：&f{count} &7個，餘額合計 &6{amount}"
@@ -185,28 +238,32 @@ audit:
 alert:
   forged: "&c[警告] &e{player} &c嘗試存入 {count} 個偽造的貨幣或支票。"
   used-cheque: "&c[警告] &e{player} &c嘗試兌現已兌現或無效的支票（編號 {serial}）。"
-  over-redeemed: "&c[警告] {value} 元的回收量（{redeemed}）超過發行量（{minted}），可能有人複製貨幣。"
+  over-redeemed: "&c[警告] {money}的回收量（{redeemed}）超過發行量（{minted}），可能有人複製貨幣。"
 
 input:
   # 聊天室輸入這個字就取消
   cancel-word: "取消"
-  cheque-amount: "&e請在聊天室輸入支票金額（整數），{seconds} 秒內有效，輸入「{cancel}」返回。"
-  withdraw-amount: "&e請在聊天室輸入要提取的金額（整數），系統會自動配好面額，{seconds} 秒內有效，輸入「{cancel}」返回。"
-  pay: "&e請在聊天室輸入「玩家名稱 金額」，例如 &fSteve 100&e，{seconds} 秒內有效，輸入「{cancel}」返回。"
+  cheque-amount: "&e請在聊天室輸入{currency}支票的金額（整數），{seconds} 秒內有效，輸入「{cancel}」返回。"
+  withdraw-amount: "&e請在聊天室輸入要提取的{currency}金額（整數），系統會自動配好面額，{seconds} 秒內有效，輸入「{cancel}」返回。"
+  pay: "&e請在聊天室輸入「玩家名稱 金額」轉帳{currency}，例如 &fSteve 100&e，{seconds} 秒內有效，輸入「{cancel}」返回。"
+  exchange-amount: "&e請在聊天室輸入要付出多少{from}換成{to}，{seconds} 秒內有效，輸入「{cancel}」返回。"
   pay-format: "&c格式是「玩家名稱 金額」。"
   timeout: "&7輸入逾時，已取消。"
   # 基岩版玩家用的輸入框（Floodgate 表單），留空送出 = 取消
   form:
     title: "VaultBank"
     cheque-amount:
-      label: "支票金額（整數）"
+      label: "{currency}支票金額（整數）"
       placeholder: "例如 500"
     withdraw-amount:
-      label: "要提取的金額（整數），系統會自動配好面額"
+      label: "要提取的{currency}金額（整數），系統會自動配好面額"
       placeholder: "例如 1234"
     pay:
-      label: "玩家名稱 金額"
+      label: "轉帳{currency}：玩家名稱 金額"
       placeholder: "例如 Steve 100"
+    exchange-amount:
+      label: "要付出多少{from}換成{to}"
+      placeholder: "例如 100"
   cancelled: "&7已取消。"
 
 log:
@@ -228,7 +285,10 @@ log:
     plugin-in: "插件入帳"
     plugin-out: "插件扣款"
     interest: "利息"
-    import: "從 TheosisEconomy 匯入"
+    # 備註欄會寫來源（TheosisEconomy 或 ExcellentEconomy:<貨幣>）
+    import: "匯入"
+    exchange-out: "兌換付出"
+    exchange-in: "兌換取得"
 
 # ---------- 介面 ----------
 gui:
@@ -248,6 +308,9 @@ gui:
       lore:
         - "&7餘額：&6{balance}"
         - "&7排名：&f{rank}"
+      # 有多個幣種時，說明改成每個幣種一行
+      balance-line: "&7{currency}：&6{balance} &8（{rank}）"
+      balance-line-no-rank: "&7{currency}：&6{balance}"
     deposit:
       name: "&a存入"
       lore:
@@ -274,6 +337,11 @@ gui:
       lore:
         - "&7轉帳給其他玩家"
         - "&e左鍵後在聊天室輸入「玩家 金額」"
+    exchange:
+      name: "&2兌換"
+      lore:
+        - "&7用一種貨幣換另一種貨幣"
+        - "&e左鍵開啟"
     toggle-on:
       name: "&a接受轉帳：開"
       lore:
@@ -284,6 +352,44 @@ gui:
       lore:
         - "&7其他玩家不能轉帳給你"
         - "&e左鍵切換"
+  currency:
+    title:
+      withdraw: "&8提取哪一種貨幣？"
+      cheque: "&8開哪一種貨幣的支票？"
+      pay: "&8轉帳哪一種貨幣？"
+    entry:
+      name: "&f{currency}"
+      lore:
+        - "&7餘額：&6{balance}"
+        - "&e左鍵選擇"
+    none: "&c目前沒有可以這樣使用的貨幣。"
+  exchange:
+    title: "&8兌換"
+    confirm-title: "&8確認兌換"
+    direction:
+      name: "&f{from} &7→ &f{to}"
+      lore:
+        - "&7匯率：1 {from} = &6{rate} {to}"
+        - "&7你的{from}：&6{balance}"
+        - "&7手續費：{fee}%"
+        - "&e左鍵輸入要付出的數量"
+    pay:
+      name: "&c付出 {pay}"
+      lore:
+        - "&7目前餘額：&6{balance}"
+    rate:
+      name: "&e匯率 1 {from} = {rate} {to}"
+      lore:
+        - "&7手續費：&6{fee}"
+        - "&7浮動匯率會隨全服兌換變動"
+    get:
+      name: "&a拿到 {get}"
+    confirm:
+      name: "&a確認兌換"
+      lore:
+        - "&7付出 &6{pay}"
+        - "&7拿到 &6{get}"
+        - "&e左鍵確認"
   deposit:
     title: "&8存入（把貨幣或支票放進來）"
     help:
@@ -293,6 +399,8 @@ gui:
         - "&7按「確認存入」才會入帳"
         - "&7關閉介面時，沒存入的物品會還給你"
         - "&7偽造或已兌現的支票會被退回"
+    # 多個幣種的合計之間的分隔
+    separator: "、"
     total:
       name: "&6合計 {amount}"
       lore:
@@ -303,21 +411,21 @@ gui:
       lore:
         - "&e左鍵存入"
   withdraw:
-    title: "&8提取"
+    title: "&8提取{currency}"
     denomination:
-      name: "&f{value} 元 × {count}"
+      name: "&f{money} × {count}"
       lore:
         - "&7小計：&6{subtotal}"
     add:
       name: "&a+{n}"
       lore:
-        - "&7{value} 元 加 {n} 個"
+        - "&7{money} 加 {n} 個"
     remove:
       name: "&c-{n}"
       lore:
-        - "&7{value} 元 減 {n} 個"
+        - "&7{money} 減 {n} 個"
     disabled:
-      name: "&8{value} 元（停止提取）"
+      name: "&8{money}（停止提取）"
     clear:
       name: "&7清除選擇"
     auto:
@@ -373,7 +481,12 @@ console:
   theosis-installed: "偵測到 TheosisEconomy 仍在 plugins 資料夾：VaultBank 不接手經濟，避免兩個經濟插件同時改餘額。請關服、移除 TheosisEconomy 的 jar（資料夾留著讓 VaultBank 匯入），再開服。"
   import-done: "已從 TheosisEconomy 匯入 {imported} 個帳戶（合計 {total}），略過已存在的 {skipped} 個，讀取失敗 {failed} 個。原資料未改動。"
   interest-paid: "已發放利息給 {count} 個帳戶"
-  texture-invalid: "貼圖 {file} 無效（需為 16～128 像素、2 的次方的正方形 PNG，256 KB 以內），改用內建貼圖"
+  texture-invalid: "貼圖 {file} 無效（需為 16～128 像素、2 的次方的正方形 PNG，256 KB 以內），改用內建外觀"
+  model-invalid: "模型 {file} 無效（{reason}），改用圖片或內建外觀"
+  excellent-import-done: "已從 ExcellentEconomy 的「{source}」匯入 {imported} 個帳戶到{currency}（合計 {total}），原資料未改動。確認無誤後就可以移除 ExcellentEconomy。"
+  excellent-import-capped: "{count} 個帳戶在 ExcellentEconomy 的數量超過{currency}餘額上限，已只匯入到上限 {max}：{players}"
+  excellent-import-missing: "{currency} 設定要從 ExcellentEconomy 的「{source}」匯入，但 ExcellentEconomy 沒有在執行，也找不到 plugins/ExcellentEconomy/data.db，這次不匯入（下次啟動或 /vb reload 會再試）"
+  excellent-import-failed: "從 ExcellentEconomy 匯入失敗：{reason}（下次啟動或 /vb reload 會再試）"
   pack-build-failed: "材質包產生失敗：{reason}"
   pack-java-ready: "Java 材質包已就緒（SHA-1 {sha1}）"
   pack-java-no-host: "沒有安裝 HttpHub，也沒有設定 resource-pack.java.url，Java 版玩家不會收到材質包（檔案在 plugins/VaultBank/pack/VaultBank-java.zip）"
@@ -385,7 +498,7 @@ console:
   pack-bedrock-no-geyser: "沒有找到 Geyser-Spigot；基岩版材質包在 plugins/VaultBank/pack/，Geyser 在代理端時請手動放到 Geyser 的 packs 與 custom_mappings 資料夾"
   alert-forged: "{player} 嘗試存入 {count} 個偽造的貨幣或支票"
   alert-used-cheque: "{player} 嘗試兌現已兌現或無效的支票（編號 {serial}）"
-  alert-over-redeemed: "{value} 元的回收量（{redeemed}）超過發行量（{minted}），可能有人複製貨幣"
+  alert-over-redeemed: "{money}的回收量（{redeemed}）超過發行量（{minted}），可能有人複製貨幣"
   update-newer: "有新版本 {latest}（目前 {current}）：{url}"
   update-latest: "目前已是最新版本"
   update-dev: "目前版本比 GitHub 新（開發版）"

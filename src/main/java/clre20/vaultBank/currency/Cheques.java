@@ -42,8 +42,8 @@ public final class Cheques {
     }
 
     /** 扣款成功後登記，排隊寫入資料庫。 */
-    public void confirm(String serial, long amount, UUID issuer, String issuerName, long time) {
-        issued.add(new Database.ChequeRow(serial, amount, issuer.toString(), issuerName, time));
+    public void confirm(String serial, long amount, UUID issuer, String issuerName, long time, String currency) {
+        issued.add(new Database.ChequeRow(serial, amount, issuer.toString(), issuerName, time, currency));
     }
 
     public void cancel(String serial) {

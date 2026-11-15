@@ -29,7 +29,7 @@ public final class Interest {
 
     /** 主執行緒每分鐘呼叫。 */
     public void tick() {
-        if (!plugin.config().interestEnabled() || plugin.config().interestRatePercent().signum() <= 0) {
+        if (!plugin.config().interestEnabled()) {
             return;
         }
         List<UUID> online = null;
@@ -76,24 +76,29 @@ public final class Interest {
 
     private void payout(List<UUID> targets) {
         Bank bank = plugin.bank();
-        BigDecimal rate = plugin.config().interestRatePercent();
-        BigDecimal cap = plugin.config().interestMaxPerPayout();
         int paid = 0;
         Iterable<UUID> ids = targets != null ? targets : bank.all().stream().map(Account::id).toList();
-        for (UUID id : ids) {
-            BigDecimal balance = bank.balance(id);
-            if (balance == null || balance.signum() <= 0) {
+        for (clre20.vaultBank.currency.Currency cur : plugin.config().currencies().allEnabled()) {
+            if (!cur.features().interest() || cur.interestRatePercent().signum() <= 0) {
                 continue;
             }
-            BigDecimal amount = balance.multiply(rate).divide(BigDecimal.valueOf(100), bank.scaleDigits(), RoundingMode.DOWN);
-            if (cap.signum() > 0 && amount.compareTo(cap) > 0) {
-                amount = cap;
-            }
-            if (amount.signum() <= 0) {
-                continue;
-            }
-            if (bank.deposit(id, amount, TxType.INTEREST, null, null, null) == Bank.Result.OK) {
-                paid++;
+            BigDecimal rate = cur.interestRatePercent();
+            BigDecimal cap = cur.interestMaxPerPayout();
+            for (UUID id : ids) {
+                BigDecimal balance = bank.balance(id, cur);
+                if (balance == null || balance.signum() <= 0) {
+                    continue;
+                }
+                BigDecimal amount = balance.multiply(rate).divide(BigDecimal.valueOf(100), cur.scale(), RoundingMode.DOWN);
+                if (cap.signum() > 0 && amount.compareTo(cap) > 0) {
+                    amount = cap;
+                }
+                if (amount.signum() <= 0) {
+                    continue;
+                }
+                if (bank.deposit(id, cur, amount, TxType.INTEREST, null, null, null) == Bank.Result.OK) {
+                    paid++;
+                }
             }
         }
         int count = paid;
