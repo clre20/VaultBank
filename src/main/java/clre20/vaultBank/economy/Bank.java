@@ -1,6 +1,7 @@
 package clre20.vaultBank.economy;
 
 import clre20.vaultBank.VaultBank;
+import clre20.vaultBank.currency.Currency;
 import clre20.vaultBank.storage.Database;
 import clre20.vaultBank.util.Money;
 
@@ -24,7 +25,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  */
 public final class Bank {
 
-    public enum Result { OK, NO_ACCOUNT, INSUFFICIENT, MAX_BALANCE, INVALID }
+    public enum Result { OK, NO_ACCOUNT, INSUFFICIENT, MAX_BALANCE, INVALID, DISABLED }
 
     /** 轉帳結果：實際扣掉的金額（含手續費）與手續費。 */
     public record Transfer(Result result, BigDecimal fee) {
@@ -78,6 +79,43 @@ public final class Bank {
     public void load() throws Exception {
         List<Database.AccountRow> rows = db.call(db::loadAccounts).get();
         loadRows(rows);
+        for (Database.BalanceRow b : db.call(db::loadBalances).get()) {
+            try {
+                Account a = accounts.get(UUID.fromString(b.uuid()));
+                if (a != null) {
+                    a.balance(b.currency(), new BigDecimal(b.balance()));
+                }
+            } catch (IllegalArgumentException e) {
+                plugin.getLogger().warning("帳戶 " + b.uuid() + " 的 " + b.currency() + " 餘額格式錯誤（" + b.balance() + "），略過");
+            }
+        }
+    }
+
+    /**
+     * 匯入其他幣種的餘額（ExcellentEconomy 等）：帳戶不存在就建立；已有餘額的帳戶加上匯入的金額。
+     * 回傳是否有匯入。
+     */
+    /** 匯入（加到現有餘額，超過上限的部分捨去）；回傳實際加上的金額，沒有加回傳 0。 */
+    BigDecimal importBalance(UUID id, String name, Currency cur, BigDecimal amount, String source) {
+        BigDecimal v = cur.round(amount);
+        if (v.signum() <= 0) {
+            return BigDecimal.ZERO;
+        }
+        Account a = getOrCreate(id, name, false);
+        BigDecimal before;
+        BigDecimal after;
+        synchronized (a) {
+            before = get(a, cur);
+            after = before.add(v).min(cur.maxBalance());
+            a.balance(cur.id(), after);
+        }
+        BigDecimal added = after.subtract(before);
+        if (added.signum() <= 0) {
+            return BigDecimal.ZERO;
+        }
+        dirty.add(id);
+        log(id, cur, TxType.IMPORT, null, null, added, after, source);
+        return added;
     }
 
     /** 匯入用：帳戶不存在時建立（回傳 false 表示已存在而略過）。 */
@@ -142,6 +180,22 @@ public final class Bank {
         return a == null ? null : a.balance();
     }
 
+    /** 指定幣種的餘額；沒有帳戶回傳 null。 */
+    public BigDecimal balance(UUID id, Currency cur) {
+        Account a = account(id);
+        return a == null ? null : get(a, cur);
+    }
+
+    /** 帳戶的某幣種餘額（沒有＝0）。 */
+    public static BigDecimal get(Account a, Currency cur) {
+        BigDecimal v = a.balance(cur.id());
+        return v == null ? cur.round(BigDecimal.ZERO) : v;
+    }
+
+    private Currency primary() {
+        return plugin.config().currencies().primary();
+    }
+
     // ---------- 建立帳戶 ----------
 
     /** 玩家登入或第一次使用時建立帳戶；名稱改了就更新（這個名稱以後指向這個帳戶）。 */
@@ -162,6 +216,11 @@ public final class Bank {
         Account a = accounts.get(id);
         if (a == null) {
             Account created = new Account(id, safeName, scale(plugin.config().defaultBalance()), true);
+            for (Currency c : plugin.config().currencies().allEnabled()) {
+                if (!c.primary() && c.defaultBalance().signum() > 0) {
+                    created.balance(c.id(), c.round(c.defaultBalance()));
+                }
+            }
             a = accounts.putIfAbsent(id, created);
             if (a == null) {
                 String key = safeName.toLowerCase(Locale.ROOT);
@@ -188,37 +247,32 @@ public final class Bank {
     // ---------- 改動 ----------
 
     /**
-     * 存入。amount 必須大於 0。
+     * 主貨幣存入。amount 必須大於 0。
      *
      * @param other     對方 UUID（轉帳等），可為 null
      * @param otherName 對方名稱或來源插件名稱，可為 null
      */
     public Result deposit(UUID id, BigDecimal amount, TxType type, UUID other, String otherName, String detail) {
-        if (amount == null || amount.signum() <= 0) {
-            return Result.INVALID;
-        }
-        Account a = account(id);
-        if (a == null) {
-            return Result.NO_ACCOUNT;
-        }
-        BigDecimal v = scale(amount);
-        if (v.signum() <= 0) {
-            return Result.INVALID;
-        }
-        BigDecimal after;
-        synchronized (a) {
-            after = a.balance().add(v);
-            if (after.compareTo(plugin.config().maxBalance()) > 0) {
-                return Result.MAX_BALANCE;
-            }
-            a.balance(after);
-        }
-        dirty.add(id);
-        log(id, type, other, otherName, v, after, detail);
-        return Result.OK;
+        return deposit(id, primary(), amount, type, other, otherName, detail);
     }
 
     public Result withdraw(UUID id, BigDecimal amount, TxType type, UUID other, String otherName, String detail) {
+        return withdraw(id, primary(), amount, type, other, otherName, detail);
+    }
+
+    public Result set(UUID id, BigDecimal amount, TxType type, String actor) {
+        return set(id, primary(), amount, type, actor);
+    }
+
+    public Transfer transfer(UUID from, UUID to, BigDecimal amount, BigDecimal feePercent) {
+        return transfer(from, to, primary(), amount, feePercent);
+    }
+
+    /** 指定幣種存入。停用的幣種回傳 DISABLED。 */
+    public Result deposit(UUID id, Currency cur, BigDecimal amount, TxType type, UUID other, String otherName, String detail) {
+        if (cur == null || !cur.enabled()) {
+            return Result.DISABLED;
+        }
         if (amount == null || amount.signum() <= 0) {
             return Result.INVALID;
         }
@@ -226,25 +280,57 @@ public final class Bank {
         if (a == null) {
             return Result.NO_ACCOUNT;
         }
-        BigDecimal v = scale(amount);
+        BigDecimal v = cur.round(amount);
         if (v.signum() <= 0) {
             return Result.INVALID;
         }
         BigDecimal after;
         synchronized (a) {
-            if (a.balance().compareTo(v) < 0) {
-                return Result.INSUFFICIENT;
+            after = get(a, cur).add(v);
+            if (after.compareTo(cur.maxBalance()) > 0) {
+                return Result.MAX_BALANCE;
             }
-            after = a.balance().subtract(v);
-            a.balance(after);
+            a.balance(cur.id(), after);
         }
         dirty.add(id);
-        log(id, type, other, otherName, v.negate(), after, detail);
+        log(id, cur, type, other, otherName, v, after, detail);
+        return Result.OK;
+    }
+
+    public Result withdraw(UUID id, Currency cur, BigDecimal amount, TxType type, UUID other, String otherName, String detail) {
+        if (cur == null || !cur.enabled()) {
+            return Result.DISABLED;
+        }
+        if (amount == null || amount.signum() <= 0) {
+            return Result.INVALID;
+        }
+        Account a = account(id);
+        if (a == null) {
+            return Result.NO_ACCOUNT;
+        }
+        BigDecimal v = cur.round(amount);
+        if (v.signum() <= 0) {
+            return Result.INVALID;
+        }
+        BigDecimal after;
+        synchronized (a) {
+            BigDecimal now = get(a, cur);
+            if (now.compareTo(v) < 0) {
+                return Result.INSUFFICIENT;
+            }
+            after = now.subtract(v);
+            a.balance(cur.id(), after);
+        }
+        dirty.add(id);
+        log(id, cur, type, other, otherName, v.negate(), after, detail);
         return Result.OK;
     }
 
     /** 直接設定餘額（管理員）。 */
-    public Result set(UUID id, BigDecimal amount, TxType type, String actor) {
+    public Result set(UUID id, Currency cur, BigDecimal amount, TxType type, String actor) {
+        if (cur == null || !cur.enabled()) {
+            return Result.DISABLED;
+        }
         if (amount == null || amount.signum() < 0) {
             return Result.INVALID;
         }
@@ -252,34 +338,37 @@ public final class Bank {
         if (a == null) {
             return Result.NO_ACCOUNT;
         }
-        BigDecimal v = scale(amount);
-        if (v.compareTo(plugin.config().maxBalance()) > 0) {
+        BigDecimal v = cur.round(amount);
+        if (v.compareTo(cur.maxBalance()) > 0) {
             return Result.MAX_BALANCE;
         }
         BigDecimal diff;
         synchronized (a) {
-            diff = v.subtract(a.balance());
-            a.balance(v);
+            diff = v.subtract(get(a, cur));
+            a.balance(cur.id(), v);
         }
         dirty.add(id);
-        log(id, type, null, actor, diff, v, null);
+        log(id, cur, type, null, actor, diff, v, null);
         return Result.OK;
     }
 
     /**
      * 轉帳：from 付 amount＋手續費，to 收 amount。兩個帳戶依 UUID 順序上鎖，避免互相等待。
      */
-    public Transfer transfer(UUID from, UUID to, BigDecimal amount, BigDecimal feePercent) {
+    public Transfer transfer(UUID from, UUID to, Currency cur, BigDecimal amount, BigDecimal feePercent) {
+        if (cur == null || !cur.enabled()) {
+            return new Transfer(Result.DISABLED, BigDecimal.ZERO);
+        }
         Account a = account(from);
         Account b = account(to);
         if (a == null || b == null) {
             return new Transfer(Result.NO_ACCOUNT, BigDecimal.ZERO);
         }
-        BigDecimal v = scale(amount);
+        BigDecimal v = cur.round(amount);
         if (v.signum() <= 0 || from.equals(to)) {
             return new Transfer(Result.INVALID, BigDecimal.ZERO);
         }
-        BigDecimal fee = scale(v.multiply(feePercent).divide(BigDecimal.valueOf(100), scaleDigits(), RoundingMode.HALF_UP));
+        BigDecimal fee = v.multiply(feePercent).divide(BigDecimal.valueOf(100), cur.scale(), RoundingMode.HALF_UP);
         BigDecimal cost = v.add(fee);
         Account first = from.compareTo(to) < 0 ? a : b;
         Account second = first == a ? b : a;
@@ -287,24 +376,61 @@ public final class Bank {
         BigDecimal afterB;
         synchronized (first) {
             synchronized (second) {
-                if (a.balance().compareTo(cost) < 0) {
+                if (get(a, cur).compareTo(cost) < 0) {
                     return new Transfer(Result.INSUFFICIENT, fee);
                 }
-                afterB = b.balance().add(v);
-                if (afterB.compareTo(plugin.config().maxBalance()) > 0) {
+                afterB = get(b, cur).add(v);
+                if (afterB.compareTo(cur.maxBalance()) > 0) {
                     return new Transfer(Result.MAX_BALANCE, fee);
                 }
-                afterA = a.balance().subtract(cost);
-                a.balance(afterA);
-                b.balance(afterB);
+                afterA = get(a, cur).subtract(cost);
+                a.balance(cur.id(), afterA);
+                b.balance(cur.id(), afterB);
             }
         }
         dirty.add(from);
         dirty.add(to);
         String feeText = fee.signum() > 0 ? "fee=" + Money.plain(fee) : null;
-        log(from, TxType.PAY_OUT, to, b.name(), cost.negate(), afterA, feeText);
-        log(to, TxType.PAY_IN, from, a.name(), v, afterB, null);
+        log(from, cur, TxType.PAY_OUT, to, b.name(), cost.negate(), afterA, feeText);
+        log(to, cur, TxType.PAY_IN, from, a.name(), v, afterB, null);
         return new Transfer(Result.OK, fee);
+    }
+
+    /**
+     * 兌換：同一個帳戶扣 from 幣 amountFrom、加 to 幣 amountTo（同一把鎖，不會只做一半）。
+     */
+    public Result exchange(UUID id, Currency from, BigDecimal amountFrom, Currency to, BigDecimal amountTo, String detail) {
+        if (from == null || to == null || !from.enabled() || !to.enabled()) {
+            return Result.DISABLED;
+        }
+        Account a = account(id);
+        if (a == null) {
+            return Result.NO_ACCOUNT;
+        }
+        BigDecimal out = from.round(amountFrom);
+        BigDecimal in = to.round(amountTo);
+        if (out.signum() <= 0 || in.signum() <= 0) {
+            return Result.INVALID;
+        }
+        BigDecimal afterFrom;
+        BigDecimal afterTo;
+        synchronized (a) {
+            BigDecimal have = get(a, from);
+            if (have.compareTo(out) < 0) {
+                return Result.INSUFFICIENT;
+            }
+            afterTo = get(a, to).add(in);
+            if (afterTo.compareTo(to.maxBalance()) > 0) {
+                return Result.MAX_BALANCE;
+            }
+            afterFrom = have.subtract(out);
+            a.balance(from.id(), afterFrom);
+            a.balance(to.id(), afterTo);
+        }
+        dirty.add(id);
+        log(id, from, TxType.EXCHANGE_OUT, null, to.id(), out.negate(), afterFrom, detail);
+        log(id, to, TxType.EXCHANGE_IN, null, from.id(), in, afterTo, detail);
+        return Result.OK;
     }
 
     public void setAccepting(UUID id, boolean accepting) {
@@ -318,6 +444,10 @@ public final class Bank {
     // ---------- 交易紀錄 ----------
 
     public void log(UUID id, TxType type, UUID other, String otherName, BigDecimal amount, BigDecimal after, String detail) {
+        log(id, primary(), type, other, otherName, amount, after, detail);
+    }
+
+    public void log(UUID id, Currency cur, TxType type, UUID other, String otherName, BigDecimal amount, BigDecimal after, String detail) {
         if (!plugin.config().logEnabled()) {
             return;
         }
@@ -334,7 +464,7 @@ public final class Bank {
         queuedLogs.incrementAndGet();
         logQueue.add(new Database.LogRow(System.currentTimeMillis(), type.name(), id.toString(),
                 other == null ? null : other.toString(), otherName, Money.plain(amount),
-                after == null ? null : Money.plain(after), detail));
+                after == null ? null : Money.plain(after), detail, cur.id()));
     }
 
     // ---------- 存檔 ----------
@@ -353,15 +483,19 @@ public final class Bank {
     /** 在 I/O 執行緒上執行：先移除髒標記再讀值，讀完之後的改動會再次被標記。 */
     private void writeNow() throws Exception {
         List<Database.AccountRow> rows = new ArrayList<>();
+        List<Database.BalanceRow> balances = new ArrayList<>();
         for (UUID id : dirty.toArray(new UUID[0])) {
             dirty.remove(id);
             Account a = accounts.get(id);
             if (a != null) {
                 rows.add(new Database.AccountRow(id.toString(), a.name(), a.balance().toPlainString(), a.accepting()));
+                for (Map.Entry<String, BigDecimal> e : a.others().entrySet()) {
+                    balances.add(new Database.BalanceRow(id.toString(), e.getKey(), e.getValue().toPlainString()));
+                }
             }
         }
         try {
-            db.saveAccounts(rows);
+            db.saveAccounts(rows, balances);
         } catch (Exception e) {
             for (Database.AccountRow r : rows) {
                 dirty.add(UUID.fromString(r.uuid()));

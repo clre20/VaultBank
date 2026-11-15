@@ -6,6 +6,8 @@ import clre20.vaultBank.config.PluginConfig;
 import clre20.vaultBank.currency.Alerts;
 import clre20.vaultBank.currency.Cheques;
 import clre20.vaultBank.currency.Circulation;
+import clre20.vaultBank.currency.Currency;
+import clre20.vaultBank.currency.Denomination;
 import clre20.vaultBank.currency.CurrencyItems;
 import clre20.vaultBank.currency.Signer;
 import clre20.vaultBank.currency.Teller;
@@ -16,7 +18,9 @@ import clre20.vaultBank.economy.TheosisImporter;
 import clre20.vaultBank.economy.VaultEconomy;
 import clre20.vaultBank.gui.ChatInput;
 import clre20.vaultBank.gui.MenuListener;
+import clre20.vaultBank.pack.Appearance;
 import clre20.vaultBank.pack.PackService;
+import clre20.vaultBank.economy.Exchange;
 import clre20.vaultBank.service.Actions;
 import clre20.vaultBank.storage.Database;
 import clre20.vaultBank.update.UpdateChecker;
@@ -59,6 +63,8 @@ public final class VaultBank extends JavaPlugin implements Listener {
     private UpdateNotifier updateNotifier;
     private VaultEconomy vaultEconomy;
     private Signer signer;
+    private Appearance appearance;
+    private Exchange exchange;
 
     private volatile boolean economyActive;
     private boolean loadFailed;
@@ -91,6 +97,8 @@ public final class VaultBank extends JavaPlugin implements Listener {
             TheosisImporter.runIfNeeded(this, database, bank);
             vaultEconomy = new VaultEconomy(this);
             getServer().getServicesManager().register(Economy.class, vaultEconomy, this, ServicePriority.High);
+            getServer().getServicesManager().register(clre20.vaultBank.api.VaultBankAPI.class,
+                    new clre20.vaultBank.api.VaultBankService(this), this, ServicePriority.Normal);
             economyActive = true;
         } catch (Throwable t) {
             loadFailed = true;
@@ -117,8 +125,12 @@ public final class VaultBank extends JavaPlugin implements Listener {
         baltop = new Baltop(this);
         interest = new Interest(this, database);
         alerts = new Alerts(this);
+        appearance = new Appearance(this);
+        appearance.reload();
         items = new CurrencyItems(this, signer);
         items.rebuild();
+        exchange = new Exchange(this, database);
+        exchange.load();
         teller = new Teller(this);
         actions = new Actions(this);
         chatInput = new ChatInput(this);
@@ -146,6 +158,16 @@ public final class VaultBank extends JavaPlugin implements Listener {
         startTasks();
         if (economyActive) {
             packs.rebuild();
+        }
+        if (economyActive) {
+            clre20.vaultBank.economy.ExcellentImporter.runIfNeeded(this);
+        }
+        if (pm.isPluginEnabled("PlaceholderAPI")) {
+            try {
+                new clre20.vaultBank.hook.PlaceholderHook(this).register();
+            } catch (Throwable t) {
+                getLogger().warning("PlaceholderAPI 變數註冊失敗：" + t);
+            }
         }
         updateNotifier.checkOnStartup();
         getLogger().info(messages.console("enabled", "accounts", bank.size()));
@@ -178,6 +200,9 @@ public final class VaultBank extends JavaPlugin implements Listener {
         if (cheques != null) {
             cheques.flushSync();
         }
+        if (exchange != null) {
+            exchange.flushAsync();
+        }
         if (database != null) {
             database.close();
         }
@@ -190,7 +215,12 @@ public final class VaultBank extends JavaPlugin implements Listener {
     public void reload() {
         config.load();
         messages.load();
+        appearance.reload();
         items.rebuild();
+        exchange.reload();
+        if (economyActive) {
+            clre20.vaultBank.economy.ExcellentImporter.runIfNeeded(this);
+        }
         stopTasks();
         startTasks();
         if (economyActive) {
@@ -205,7 +235,9 @@ public final class VaultBank extends JavaPlugin implements Listener {
             cheques.flushAsync();
             bank.flushAsync();
             circulation.flushAsync();
+            exchange.flushAsync();
         }, save, save));
+        tasks.add(Bukkit.getScheduler().runTaskTimer(this, exchange::tick, 20L * 60, 20L * 60));
         long top = config.baltopIntervalSeconds() * 20L;
         tasks.add(Bukkit.getScheduler().runTaskTimer(this, () -> database.call(() -> {
             baltop.rebuild();
@@ -286,10 +318,42 @@ public final class VaultBank extends JavaPlugin implements Listener {
 
     // ---------- 共用 ----------
 
-    /** 金額顯示，例如「1,234.5 元」。 */
+    /** 主貨幣金額顯示，例如「1,234.5 元」。 */
     public String format(BigDecimal amount) {
+        return format(config.currencies().primary(), amount);
+    }
+
+    /** 指定幣種的金額顯示，例如「12 企鵝幣」。 */
+    public String format(Currency cur, BigDecimal amount) {
         BigDecimal v = amount == null ? BigDecimal.ZERO : amount;
-        return messages.plain("currency.format", "amount", Money.format(v, config.decimalPlaces()));
+        if (cur == null || cur.primary()) {
+            return messages.plain("currency.format", "amount", Money.format(v, config.decimalPlaces()));
+        }
+        String amountText = Money.format(v, cur.scale());
+        String key = "currencies." + cur.id() + ".format";
+        return messages.has(key)
+                ? messages.plain(key, "amount", amountText)
+                : messages.plain("currency.generic-format", "amount", amountText, "currency", currencyName(cur));
+    }
+
+    /** 幣種名稱（純文字），例如「元」「企鵝幣」。 */
+    public String currencyName(Currency cur) {
+        if (cur == null || cur.primary()) {
+            return messages.plain("currency.name-singular");
+        }
+        String key = "currencies." + cur.id() + ".name";
+        return messages.has(key) ? messages.plain(key) : cur.id();
+    }
+
+    /** 面額物品的名稱（純文字，給基岩版對照檔用）。 */
+    public String itemName(Denomination d) {
+        String key = messages.has("items." + d.id() + ".name") ? "items." + d.id() : "items.generic-money";
+        return messages.plain(key + ".name", "value", d.value(), "currency", currencyName(d.currency()));
+    }
+
+    /** 找幣種（不分大小寫，含停用的）；找不到回傳 null。 */
+    public Currency currency(String id) {
+        return config.currencies().get(id);
     }
 
     public boolean economyActive() {
@@ -309,6 +373,8 @@ public final class VaultBank extends JavaPlugin implements Listener {
     public Actions actions() { return actions; }
     public ChatInput chatInput() { return chatInput; }
     public PackService packs() { return packs; }
+    public Appearance appearance() { return appearance; }
+    public Exchange exchange() { return exchange; }
     public UpdateChecker updates() { return updates; }
     public UpdateNotifier updateNotifier() { return updateNotifier; }
 }

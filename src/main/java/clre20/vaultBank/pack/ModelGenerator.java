@@ -58,7 +58,7 @@ final class ModelGenerator {
             elements.add(e);
         }
         root.add("elements", elements);
-        root.add("display", display());
+        root.add("display", defaultDisplay());
         return root;
     }
 
@@ -133,7 +133,7 @@ final class ModelGenerator {
     }
 
     /** 與原版 item/generated 相同的顯示角度。 */
-    private static JsonObject display() {
+    static JsonObject defaultDisplay() {
         JsonObject d = new JsonObject();
         d.add("ground", transform(new double[]{0, 0, 0}, new double[]{0, 2, 0}, 0.5));
         d.add("head", transform(new double[]{0, 180, 0}, new double[]{0, 13, 7}, 1));

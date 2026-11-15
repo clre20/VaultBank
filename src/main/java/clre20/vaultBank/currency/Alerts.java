@@ -24,7 +24,8 @@ public final class Alerts {
     }
 
     public void overRedeemed(Denomination d, long minted, long redeemed) {
-        notify("over-redeemed", "value", d.value(), "minted", minted, "redeemed", redeemed);
+        notify("over-redeemed", "value", d.value(), "money", plugin.format(d.currency(), java.math.BigDecimal.valueOf(d.value())),
+                "currency", plugin.currencyName(d.currency()), "minted", minted, "redeemed", redeemed);
     }
 
     private void notify(String key, Object... vars) {

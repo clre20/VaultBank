@@ -79,8 +79,8 @@ public final class LogMenu extends Menu {
             String typeName = type == null ? r.type() : plugin.messages().plain("log.types." + type.key());
             inventory.setItem(i, button(amount.signum() >= 0 ? Material.LIME_DYE : Material.RED_DYE, "gui.log.entry",
                     "type", typeName,
-                    "amount", (amount.signum() > 0 ? "+" : "") + plugin.format(amount),
-                    "balance", r.balance() == null ? "-" : plugin.format(parse(r.balance())),
+                    "amount", (amount.signum() > 0 ? "+" : "") + fmt(plugin, r, amount),
+                    "balance", r.balance() == null ? "-" : fmt(plugin, r, parse(r.balance())),
                     "time", fmt.format(new Date(r.time())),
                     "other", r.otherName() == null ? "-" : r.otherName(),
                     "detail", r.detail() == null ? "-" : r.detail()));
@@ -103,6 +103,13 @@ public final class LogMenu extends Menu {
         } catch (IllegalArgumentException e) {
             return new SimpleDateFormat("MM-dd HH:mm");
         }
+    }
+
+    /** 用該筆紀錄的幣種顯示金額；幣種已從設定移除時顯示「數字 幣種id」。 */
+    private static String fmt(VaultBank plugin, Database.LogRow r, BigDecimal v) {
+        String id = r.currency() == null ? clre20.vaultBank.currency.Currency.PRIMARY : r.currency();
+        clre20.vaultBank.currency.Currency c = plugin.currency(id);
+        return c != null ? plugin.format(c, v) : v.stripTrailingZeros().toPlainString() + " " + id;
     }
 
     private static BigDecimal parse(String s) {
@@ -171,8 +178,8 @@ public final class LogMenu extends Menu {
                 plugin.messages().line(sender, "log.line",
                         "time", fmt.format(new Date(r.time())),
                         "type", type == null ? r.type() : plugin.messages().plain("log.types." + type.key()),
-                        "amount", (amount.signum() > 0 ? "+" : "") + plugin.format(amount),
-                        "balance", r.balance() == null ? "-" : plugin.format(parse(r.balance())),
+                        "amount", (amount.signum() > 0 ? "+" : "") + fmt(plugin, r, amount),
+                        "balance", r.balance() == null ? "-" : fmt(plugin, r, parse(r.balance())),
                         "other", r.otherName() == null ? "-" : r.otherName(),
                         "detail", r.detail() == null ? "-" : r.detail());
             }

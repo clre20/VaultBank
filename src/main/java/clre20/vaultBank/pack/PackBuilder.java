@@ -12,16 +12,11 @@ import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
-import java.io.File;
 import java.io.IOException;
-import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.security.MessageDigest;
-import java.util.ArrayList;
 import java.util.HexFormat;
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.zip.ZipEntry;
@@ -29,7 +24,7 @@ import java.util.zip.ZipOutputStream;
 
 /**
  * 產生材質包：Java 版 zip（3D 模型）、基岩版 .mcpack 與 Geyser 自訂物品對照檔。
- * 貼圖讀 plugins/VaultBank/textures/&lt;名稱&gt;.png（沒有時放入預設貼圖），內容相同時輸出的檔案位元組也相同，
+ * 外觀由 {@link Appearance} 決定（模型、圖片加厚度或原版物品），內容相同時輸出的檔案位元組也相同，
  * 所以 SHA-1 不變，玩家不會每次重開都重新下載。
  */
 public final class PackBuilder {
@@ -49,77 +44,31 @@ public final class PackBuilder {
         this.plugin = plugin;
     }
 
-    /** 所有物品的名稱（材質包裡的檔名）。 */
-    public static List<String> ids() {
-        List<String> ids = new ArrayList<>();
-        for (Denomination d : Denomination.values()) {
-            ids.add(d.id());
-        }
-        ids.add("cheque");
-        return ids;
-    }
-
     public Built build() throws IOException {
-        Map<String, byte[]> textures = loadTextures();
-        byte[] javaZip = javaPack(textures);
+        Map<String, Appearance.Look> looks = plugin.appearance().looks();
+        byte[] javaZip = javaPack(looks);
         String sha1 = HexFormat.of().formatHex(digest("SHA-1", javaZip));
-        byte[] bedrock = bedrockPack(textures);
-        return new Built(javaZip, sha1, bedrock, mappings());
+        byte[] bedrock = bedrockPack(looks);
+        return new Built(javaZip, sha1, bedrock, mappings(looks));
     }
 
-    // ---------- 貼圖 ----------
-
-    private Map<String, byte[]> loadTextures() throws IOException {
-        File dir = new File(plugin.getDataFolder(), "textures");
-        if (!dir.isDirectory() && !dir.mkdirs()) {
-            throw new IOException("無法建立 " + dir);
+    /** 材質包圖示：元 50 的圖，沒有就用第一個有圖的外觀。 */
+    private static byte[] packIcon(Map<String, Appearance.Look> looks) {
+        Appearance.Look l = looks.get("coin_50");
+        if (l != null && l.icon() != null) {
+            return l.icon();
         }
-        Map<String, byte[]> out = new LinkedHashMap<>();
-        for (String id : ids()) {
-            byte[] builtin = builtin(id);
-            File f = new File(dir, id + ".png");
-            if (!f.isFile()) {
-                Files.write(f.toPath(), builtin);
-                out.put(id, builtin);
-                continue;
-            }
-            byte[] custom = Files.readAllBytes(f.toPath());
-            if (custom.length > 256 * 1024 || !validTexture(custom)) {
-                plugin.getLogger().warning(plugin.messages().console("texture-invalid", "file", f.getName()));
-                out.put(id, builtin);
-            } else {
-                out.put(id, custom);
+        for (Appearance.Look x : looks.values()) {
+            if (x.icon() != null) {
+                return x.icon();
             }
         }
-        return out;
-    }
-
-    private byte[] builtin(String id) throws IOException {
-        try (InputStream in = plugin.getResource("textures/" + id + ".png")) {
-            if (in == null) {
-                throw new IOException("jar 內缺少貼圖 " + id);
-            }
-            return in.readAllBytes();
-        }
-    }
-
-    /** 正方形、16～128 像素、2 的次方。 */
-    private static boolean validTexture(byte[] png) {
-        try {
-            BufferedImage img = ImageIO.read(new ByteArrayInputStream(png));
-            if (img == null) {
-                return false;
-            }
-            int w = img.getWidth();
-            return w == img.getHeight() && w >= 16 && w <= 128 && Integer.bitCount(w) == 1;
-        } catch (IOException e) {
-            return false;
-        }
+        return null;
     }
 
     // ---------- Java ----------
 
-    private byte[] javaPack(Map<String, byte[]> textures) throws IOException {
+    private byte[] javaPack(Map<String, Appearance.Look> looks) throws IOException {
         Map<String, byte[]> files = new LinkedHashMap<>();
         JsonObject pack = new JsonObject();
         JsonObject inner = new JsonObject();
@@ -128,12 +77,32 @@ public final class PackBuilder {
         inner.addProperty("max_format", 999);
         pack.add("pack", inner);
         files.put("pack.mcmeta", PRETTY.toJson(pack).getBytes(StandardCharsets.UTF_8));
-        files.put("pack.png", textures.get(Denomination.COIN_50.id()));
-        for (String id : ids()) {
-            byte[] png = textures.get(id);
-            BufferedImage img = ImageIO.read(new ByteArrayInputStream(png));
-            ModelGenerator.Thickness t = thickness(id);
-            JsonObject model = ModelGenerator.model(img, "vaultbank:item/" + id, t);
+        byte[] icon = packIcon(looks);
+        if (icon != null) {
+            files.put("pack.png", icon);
+        }
+        Map<String, byte[]> textures = new LinkedHashMap<>();
+        for (Map.Entry<String, Appearance.Look> e : looks.entrySet()) {
+            String id = e.getKey();
+            Appearance.Look look = e.getValue();
+            JsonObject model;
+            switch (look.type()) {
+                case MODEL -> model = look.model();
+                case IMAGE -> {
+                    byte[] png = look.textures().get(id);
+                    BufferedImage img = ImageIO.read(new ByteArrayInputStream(png));
+                    model = ModelGenerator.model(img, "vaultbank:item/" + id, thickness(id));
+                }
+                default -> {
+                    continue; // 原版外觀不需要材質包
+                }
+            }
+            for (Map.Entry<String, byte[]> t : look.textures().entrySet()) {
+                byte[] old = textures.putIfAbsent(t.getKey(), t.getValue());
+                if (old != null && !java.util.Arrays.equals(old, t.getValue())) {
+                    plugin.getLogger().warning("貼圖名稱 " + t.getKey() + " 被不同的模型重複使用，只會用第一張");
+                }
+            }
             files.put("assets/vaultbank/models/item/" + id + ".json", GSON.toJson(model).getBytes(StandardCharsets.UTF_8));
             JsonObject def = new JsonObject();
             JsonObject m = new JsonObject();
@@ -141,7 +110,9 @@ public final class PackBuilder {
             m.addProperty("model", "vaultbank:item/" + id);
             def.add("model", m);
             files.put("assets/vaultbank/items/" + id + ".json", GSON.toJson(def).getBytes(StandardCharsets.UTF_8));
-            files.put("assets/vaultbank/textures/item/" + id + ".png", png);
+        }
+        for (Map.Entry<String, byte[]> t : textures.entrySet()) {
+            files.put("assets/vaultbank/textures/item/" + t.getKey() + ".png", t.getValue());
         }
         return zip(files);
     }
@@ -153,28 +124,35 @@ public final class PackBuilder {
             // 羊皮卷兩端的捲軸比較厚（左右各約 5/32 寬）
             return (x, y, size) -> (x < size * 5 / 32 || x >= size * 27 / 32) ? roll : body;
         }
-        Denomination d = Denomination.byId(id);
-        double t = d != null && d.coin() ? plugin.config().coinThickness() : plugin.config().noteThickness();
+        Denomination d = plugin.config().currencies().denomination(id);
+        double t = d != null ? d.thickness() : plugin.config().coinThickness();
         return (x, y, size) -> t;
     }
 
     // ---------- 基岩版 ----------
 
-    private byte[] bedrockPack(Map<String, byte[]> textures) throws IOException {
+    private byte[] bedrockPack(Map<String, Appearance.Look> looks) throws IOException {
         Map<String, byte[]> files = new LinkedHashMap<>();
         JsonObject itemTexture = new JsonObject();
         itemTexture.addProperty("resource_pack_name", "vaultbank");
         itemTexture.addProperty("texture_name", "atlas.items");
         JsonObject data = new JsonObject();
-        for (String id : ids()) {
+        for (Map.Entry<String, Appearance.Look> e : looks.entrySet()) {
+            if (e.getValue().icon() == null) {
+                continue;
+            }
+            String id = e.getKey();
             JsonObject entry = new JsonObject();
             entry.addProperty("textures", "textures/items/vaultbank/" + id);
             data.add("vaultbank." + id, entry);
-            files.put("textures/items/vaultbank/" + id + ".png", textures.get(id));
+            files.put("textures/items/vaultbank/" + id + ".png", e.getValue().icon());
         }
         itemTexture.add("texture_data", data);
         files.put("textures/item_texture.json", PRETTY.toJson(itemTexture).getBytes(StandardCharsets.UTF_8));
-        files.put("pack_icon.png", textures.get(Denomination.COIN_50.id()));
+        byte[] icon = packIcon(looks);
+        if (icon != null) {
+            files.put("pack_icon.png", icon);
+        }
 
         // 版本號跟著內容變，基岩版玩家才會重新下載改過的貼圖
         ByteArrayOutputStream all = new ByteArrayOutputStream();
@@ -219,24 +197,39 @@ public final class PackBuilder {
         return v;
     }
 
-    /** Geyser custom_mappings（format_version 2，以 item_model 對應）。 */
-    private String mappings() {
+    /**
+     * Geyser custom_mappings（format_version 2，以 item_model 對應）。
+     * 原版外觀的面額用 minecraft:&lt;物品&gt; 當 item_model，同一種物品只能對應一次，圖示用基岩版內建的同名貼圖。
+     */
+    private String mappings(Map<String, Appearance.Look> looks) {
         JsonObject root = new JsonObject();
         root.addProperty("format_version", 2);
         JsonObject items = new JsonObject();
         JsonArray list = new JsonArray();
-        for (String id : ids()) {
+        java.util.Set<String> vanilla = new java.util.HashSet<>();
+        for (Map.Entry<String, Appearance.Look> e : looks.entrySet()) {
+            String id = e.getKey();
+            Appearance.Look look = e.getValue();
+            Denomination d = plugin.config().currencies().denomination(id);
             JsonObject def = new JsonObject();
             def.addProperty("type", "definition");
-            def.addProperty("model", "vaultbank:" + id);
-            def.addProperty("bedrock_identifier", "vaultbank:" + id);
-            Denomination d = Denomination.byId(id);
-            String name = d != null
-                    ? plugin.messages().plain("items." + id + ".name", "value", d.value())
-                    : plugin.messages().plain("items.cheque.bedrock-name");
+            String icon;
+            if (look.type() == Appearance.Type.VANILLA) {
+                if (!vanilla.add(look.material())) {
+                    continue;
+                }
+                def.addProperty("model", "minecraft:" + look.material());
+                def.addProperty("bedrock_identifier", "vaultbank:vanilla_" + look.material());
+                icon = look.material();
+            } else {
+                def.addProperty("model", "vaultbank:" + id);
+                def.addProperty("bedrock_identifier", "vaultbank:" + id);
+                icon = "vaultbank." + id;
+            }
+            String name = d != null ? plugin.itemName(d) : plugin.messages().plain("items.cheque.bedrock-name");
             def.addProperty("display_name", name);
             JsonObject options = new JsonObject();
-            options.addProperty("icon", "vaultbank." + id);
+            options.addProperty("icon", icon);
             options.addProperty("allow_offhand", true);
             def.add("bedrock_options", options);
             JsonObject components = new JsonObject();

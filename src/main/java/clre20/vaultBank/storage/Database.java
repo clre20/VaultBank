@@ -28,10 +28,14 @@ public final class Database {
     }
 
     public record LogRow(long time, String type, String uuid, String other, String otherName,
-                         String amount, String balance, String detail) {
+                         String amount, String balance, String detail, String currency) {
     }
 
-    public record ChequeRow(String serial, long amount, String issuer, String issuerName, long issued) {
+    public record ChequeRow(String serial, long amount, String issuer, String issuerName, long issued, String currency) {
+    }
+
+    /** 主貨幣以外的餘額。 */
+    public record BalanceRow(String uuid, String currency, String balance) {
     }
 
     public record Redemption(String serial, long time, String redeemer) {
@@ -71,9 +75,26 @@ public final class Database {
                 s.execute("CREATE TABLE IF NOT EXISTS circulation (denom TEXT PRIMARY KEY, minted INTEGER NOT NULL, "
                         + "redeemed INTEGER NOT NULL)");
                 s.execute("CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT)");
+                s.execute("CREATE TABLE IF NOT EXISTS balances (uuid TEXT NOT NULL, currency TEXT NOT NULL, "
+                        + "balance TEXT NOT NULL, PRIMARY KEY (uuid, currency))");
+                s.execute("CREATE INDEX IF NOT EXISTS balances_currency ON balances (currency)");
+                // 1.1.0 起：紀錄與支票多了幣種欄位（舊資料都是主貨幣）
+                addColumn(s, "logs", "currency", "TEXT NOT NULL DEFAULT 'yuan'");
+                addColumn(s, "cheques", "currency", "TEXT NOT NULL DEFAULT 'yuan'");
             }
             return null;
         }).get(30, TimeUnit.SECONDS);
+    }
+
+    private static void addColumn(Statement s, String table, String column, String type) throws SQLException {
+        try (ResultSet rs = s.executeQuery("PRAGMA table_info(" + table + ")")) {
+            while (rs.next()) {
+                if (column.equalsIgnoreCase(rs.getString("name"))) {
+                    return;
+                }
+            }
+        }
+        s.execute("ALTER TABLE " + table + " ADD COLUMN " + column + " " + type);
     }
 
     /** 送出所有排隊中的工作並關閉連線，最多等 30 秒。 */
@@ -133,8 +154,24 @@ public final class Database {
         return out;
     }
 
+    public List<BalanceRow> loadBalances() throws SQLException {
+        List<BalanceRow> out = new ArrayList<>();
+        try (Statement s = connection.createStatement();
+             ResultSet rs = s.executeQuery("SELECT uuid, currency, balance FROM balances")) {
+            while (rs.next()) {
+                out.add(new BalanceRow(rs.getString(1), rs.getString(2), rs.getString(3)));
+            }
+        }
+        return out;
+    }
+
     public void saveAccounts(List<AccountRow> rows) throws SQLException {
-        if (rows.isEmpty()) {
+        saveAccounts(rows, List.of());
+    }
+
+    /** 帳戶與其他幣種餘額在同一個交易裡寫入。 */
+    public void saveAccounts(List<AccountRow> rows, List<BalanceRow> balances) throws SQLException {
+        if (rows.isEmpty() && balances.isEmpty()) {
             return;
         }
         boolean auto = connection.getAutoCommit();
@@ -151,6 +188,19 @@ public final class Database {
                 ps.addBatch();
             }
             ps.executeBatch();
+            if (!balances.isEmpty()) {
+                try (PreparedStatement pb = connection.prepareStatement(
+                        "INSERT INTO balances (uuid, currency, balance) VALUES (?, ?, ?) "
+                                + "ON CONFLICT(uuid, currency) DO UPDATE SET balance = excluded.balance")) {
+                    for (BalanceRow b : balances) {
+                        pb.setString(1, b.uuid());
+                        pb.setString(2, b.currency());
+                        pb.setString(3, b.balance());
+                        pb.addBatch();
+                    }
+                    pb.executeBatch();
+                }
+            }
             connection.commit();
         } catch (SQLException e) {
             connection.rollback();
@@ -169,7 +219,7 @@ public final class Database {
         boolean auto = connection.getAutoCommit();
         connection.setAutoCommit(false);
         try (PreparedStatement ps = connection.prepareStatement(
-                "INSERT INTO logs (time, type, uuid, other, other_name, amount, balance, detail) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")) {
+                "INSERT INTO logs (time, type, uuid, other, other_name, amount, balance, detail, currency) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)")) {
             for (LogRow r : rows) {
                 ps.setLong(1, r.time());
                 ps.setString(2, r.type());
@@ -179,6 +229,7 @@ public final class Database {
                 ps.setString(6, r.amount());
                 ps.setString(7, r.balance());
                 ps.setString(8, r.detail());
+                ps.setString(9, r.currency());
                 ps.addBatch();
             }
             ps.executeBatch();
@@ -194,7 +245,7 @@ public final class Database {
     public List<LogRow> queryLogs(String uuid, long since, int offset, int limit) throws SQLException {
         List<LogRow> out = new ArrayList<>();
         try (PreparedStatement ps = connection.prepareStatement(
-                "SELECT time, type, uuid, other, other_name, amount, balance, detail FROM logs "
+                "SELECT time, type, uuid, other, other_name, amount, balance, detail, currency FROM logs "
                         + "WHERE uuid = ? AND time >= ? ORDER BY time DESC, id DESC LIMIT ? OFFSET ?")) {
             ps.setString(1, uuid);
             ps.setLong(2, since);
@@ -203,7 +254,7 @@ public final class Database {
             try (ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) {
                     out.add(new LogRow(rs.getLong(1), rs.getString(2), rs.getString(3), rs.getString(4),
-                            rs.getString(5), rs.getString(6), rs.getString(7), rs.getString(8)));
+                            rs.getString(5), rs.getString(6), rs.getString(7), rs.getString(8), rs.getString(9)));
                 }
             }
         }
@@ -245,13 +296,14 @@ public final class Database {
         boolean auto = connection.getAutoCommit();
         connection.setAutoCommit(false);
         try (PreparedStatement ps = connection.prepareStatement(
-                "INSERT OR IGNORE INTO cheques (serial, amount, issuer, issuer_name, issued) VALUES (?, ?, ?, ?, ?)")) {
+                "INSERT OR IGNORE INTO cheques (serial, amount, issuer, issuer_name, issued, currency) VALUES (?, ?, ?, ?, ?, ?)")) {
             for (ChequeRow r : rows) {
                 ps.setString(1, r.serial());
                 ps.setLong(2, r.amount());
                 ps.setString(3, r.issuer());
                 ps.setString(4, r.issuerName());
                 ps.setLong(5, r.issued());
+                ps.setString(6, r.currency());
                 ps.addBatch();
             }
             ps.executeBatch();
@@ -295,6 +347,18 @@ public final class Database {
              ResultSet rs = s.executeQuery("SELECT serial, amount FROM cheques WHERE redeemed IS NULL")) {
             while (rs.next()) {
                 out.put(rs.getString(1), rs.getLong(2));
+            }
+        }
+        return out;
+    }
+
+    public Map<String, long[]> chequeStatsByCurrency() throws SQLException {
+        Map<String, long[]> out = new HashMap<>();
+        try (Statement s = connection.createStatement();
+             ResultSet rs = s.executeQuery("SELECT currency, COUNT(*), COALESCE(SUM(amount), 0) FROM cheques "
+                     + "WHERE redeemed IS NULL GROUP BY currency")) {
+            while (rs.next()) {
+                out.put(rs.getString(1), new long[]{rs.getLong(2), rs.getLong(3)});
             }
         }
         return out;

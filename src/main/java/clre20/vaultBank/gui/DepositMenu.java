@@ -1,6 +1,7 @@
 package clre20.vaultBank.gui;
 
 import clre20.vaultBank.VaultBank;
+import clre20.vaultBank.currency.Currency;
 import clre20.vaultBank.currency.CurrencyItems;
 import clre20.vaultBank.currency.Teller;
 import org.bukkit.Bukkit;
@@ -14,7 +15,10 @@ import org.bukkit.inventory.ItemStack;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.StringJoiner;
 
 /**
  * 存入介面（54 格）：上面 45 格放貨幣與支票（照原版拿放，但只收本插件的物品），最下面一列是按鈕（只吃左鍵）。
@@ -45,7 +49,7 @@ public final class DepositMenu extends Menu {
 
     private void renderTotal() {
         CurrencyItems ci = plugin.items();
-        BigDecimal total = BigDecimal.ZERO;
+        Map<Currency, BigDecimal> totals = new LinkedHashMap<>();
         int count = 0;
         int invalid = 0;
         for (int i = 0; i < AREA; i++) {
@@ -56,12 +60,16 @@ public final class DepositMenu extends Menu {
             CurrencyItems.Identified id = ci.identify(item);
             switch (id.kind()) {
                 case MONEY -> {
-                    total = total.add(BigDecimal.valueOf((long) id.denomination().value() * item.getAmount()));
-                    count += item.getAmount();
+                    if (id.currency().enabled()) {
+                        totals.merge(id.currency(), BigDecimal.valueOf(id.denomination().value() * item.getAmount()), BigDecimal::add);
+                        count += item.getAmount();
+                    } else {
+                        invalid += item.getAmount();
+                    }
                 }
                 case CHEQUE -> {
-                    if (plugin.cheques().isOutstanding(id.serial(), id.amount())) {
-                        total = total.add(BigDecimal.valueOf(id.amount()));
+                    if (id.currency().enabled() && plugin.cheques().isOutstanding(id.serial(), id.amount())) {
+                        totals.merge(id.currency(), BigDecimal.valueOf(id.amount()), BigDecimal::add);
                         count++;
                     } else {
                         invalid += item.getAmount();
@@ -70,10 +78,22 @@ public final class DepositMenu extends Menu {
                 default -> invalid += item.getAmount();
             }
         }
+        String amount;
+        if (totals.isEmpty()) {
+            amount = plugin.format(BigDecimal.ZERO);
+        } else {
+            StringJoiner j = new StringJoiner(plugin.messages().plain("gui.deposit.separator"));
+            for (Currency c : plugin.config().currencies().all()) {
+                if (totals.containsKey(c)) {
+                    j.add(plugin.format(c, totals.get(c)));
+                }
+            }
+            amount = j.toString();
+        }
         inventory.setItem(TOTAL, button(Material.GOLD_INGOT, "gui.deposit.total",
-                "amount", plugin.format(total), "count", count, "invalid", invalid));
-        inventory.setItem(CONFIRM, button(total.signum() > 0 ? Material.LIME_CONCRETE : Material.GRAY_CONCRETE,
-                "gui.deposit.confirm", "amount", plugin.format(total)));
+                "amount", amount, "count", count, "invalid", invalid));
+        inventory.setItem(CONFIRM, button(!totals.isEmpty() ? Material.LIME_CONCRETE : Material.GRAY_CONCRETE,
+                "gui.deposit.confirm", "amount", amount));
     }
 
     /** 物品變動後下一 tick 更新總額（同一 tick 多次變動只更新一次）。 */

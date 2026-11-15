@@ -11,7 +11,7 @@ currency:
   # 單一帳戶的餘額上限
   max-balance: 10000000000000
 
-# 個別面額是否可以提取（關掉後仍可存入已經發出去的）
+# 「元」的個別面額是否可以提取（關掉後仍可存入已經發出去的）
 denominations:
   coin-1: true
   coin-5: true
@@ -20,6 +20,86 @@ denominations:
   note-100: true
   note-500: true
   note-1000: true
+
+# ---------- 其他幣種 ----------
+# 每個幣種有自己的銀行餘額。Vault 只綁定「元」，其他幣種給本插件的指令與介面、PlaceholderAPI、
+# 以及用 VaultBank API 的插件（例如 AetherMart 的 type: vaultbank）使用。
+# 鍵是幣種 id（a-z、0-9、_，最多 16 字），指令用它，例如 /pay Steve 10 penguin。
+# 幣種名稱與金額格式在 messages.yml 的 currencies.<幣種 id>。
+#
+# 外觀（每個面額）：把檔案放在 plugins/VaultBank/textures/，檔名用面額 id
+#   <面額id>.json  Java 版模型（例如 Blockbench 匯出），模型用到的貼圖也放在同一個資料夾
+#   <面額id>.png   圖片，自動加上 thickness 的厚度變成立體
+#   都沒有        用 material 的原版物品外觀
+#   appearance: vanilla 強制用原版物品外觀
+# 基岩版一律顯示 2D 圖示（<面額id>.png，沒有時用模型的第一張貼圖）。改完 /vb reload。
+currencies:
+  penguin:
+    # 預設停用，改成 true 後 /vb reload
+    enabled: false
+    # 小數位數（0 = 只能是整數）
+    decimal-places: 0
+    default-balance: 0
+    max-balance: 1000000000
+    # 個別功能開關
+    features:
+      pay: true
+      cheque: true
+      interest: true
+      baltop: true
+      physical: true
+    pay:
+      min-amount: 1
+      fee-percent: 0
+    cheque:
+      min-amount: 1
+      max-amount: 0
+      fee-percent: 0
+    # 發放間隔與是否只發給在線玩家用下面 interest 區段的設定，該區段的 enabled 也要開
+    interest:
+      rate-percent: 0.1
+      max-per-payout: 0
+    # 第一次啟用時匯入 ExcellentEconomy 的貨幣（填 ExcellentEconomy 的貨幣 id，留空 = 不匯入）
+    # 匯入時 ExcellentEconomy 要在執行中，或 plugins/ExcellentEconomy 資料夾還在；只匯入一次
+    import:
+      excellent-economy: ""
+    # 實體貨幣的面額（面額 id 在所有幣種之間不能重複）
+    denominations:
+      penguin_1:
+        value: 1
+        enabled: true
+        # 沒有模型與圖片時的原版物品外觀
+        material: prismarine_crystals
+        # 用圖片自動加厚度時的厚度（一格方塊 = 16）
+        thickness: 1.5
+        # auto = 模型 > 圖片 > 原版物品；vanilla = 強制原版物品
+        appearance: auto
+
+# ---------- 兌換 ----------
+exchange:
+  # 預設停用
+  enabled: false
+  # 手續費（百分比，從換到的數量扣）
+  fee-percent: 0
+  # 每一組：1 個 from ＝ rate 個 to
+  #   allow-reverse: true 兩個方向都能換；false 只能 from → to（預設的 元 → 企鵝幣 不能換回元）
+  #   mode: fixed    固定匯率
+  #   mode: floating 浮動匯率：全服換越多，匯率被推得越遠（像不同國家的外匯）；沒人換時慢慢回到 rate
+  #     liquidity：市場深度（以 to 計），越大匯率越難被推動
+  #     recover-percent-per-hour：每小時往 rate 回復的比例
+  #     min-rate／max-rate：匯率上下限，會超出的兌換直接拒絕
+  pairs:
+    yuan_penguin:
+      from: yuan
+      to: penguin
+      allow-reverse: false
+      mode: fixed
+      rate: 0.01
+      floating:
+        liquidity: 100000
+        recover-percent-per-hour: 5
+        min-rate: 0.001
+        max-rate: 0.1
 
 # ---------- 存檔 ----------
 storage:
@@ -35,7 +115,7 @@ baltop:
   # 餘額至少多少才列入排行榜
   min-balance: 0.01
 
-# ---------- 轉帳 ----------
+# ---------- 轉帳（元；其他幣種在 currencies.<幣種>.pay） ----------
 pay:
   # 最低轉帳金額
   min-amount: 0.01
@@ -47,7 +127,7 @@ withdraw:
   # 一次最多提取幾枚／張（上限 2304 = 36 格 × 64）
   max-items: 2304
 
-# ---------- 支票 ----------
+# ---------- 支票（元；其他幣種在 currencies.<幣種>.cheque） ----------
 cheque:
   # 最低面額（整數）
   min-amount: 1
@@ -67,6 +147,8 @@ interest:
   max-per-payout: 0
   # 只發給發放當下在線的玩家
   online-only: true
+
+# 其他幣種的利率在 currencies.<幣種>.interest
 
 # ---------- 交易紀錄 ----------
 logs:
@@ -100,7 +182,7 @@ resource-pack:
     enabled: true
     # Geyser 資料夾；留空 = 自動找 plugins/Geyser-Spigot
     geyser-folder: ""
-  # Java 版 3D 模型厚度（一格方塊 = 16）
+  # 「元」與支票用圖片時的 3D 厚度（一格方塊 = 16）；其他幣種在 currencies.<幣種>.denominations.<面額>.thickness
   model:
     coin-thickness: 1.5
     note-thickness: 0.5

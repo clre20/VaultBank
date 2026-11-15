@@ -15,6 +15,8 @@ public enum TxType {
     PLUGIN_IN,
     PLUGIN_OUT,
     INTEREST,
+    EXCHANGE_OUT,
+    EXCHANGE_IN,
     IMPORT;
 
     public String key() {
