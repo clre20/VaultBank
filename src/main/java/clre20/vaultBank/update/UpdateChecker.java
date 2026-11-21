@@ -32,17 +32,6 @@ public final class UpdateChecker {
     }
 
     private final String current;
-    private final ExecutorService executor = Executors.newSingleThreadExecutor(r -> {
-        Thread t = new Thread(r, "VaultBank-UpdateChecker");
-        t.setDaemon(true);
-        return t;
-    });
-    private final HttpClient client = HttpClient.newBuilder()
-            .connectTimeout(Duration.ofSeconds(10))
-            .followRedirects(HttpClient.Redirect.NORMAL)
-            .executor(executor)
-            .build();
-
     private CompletableFuture<Result> cached;
     private long cachedAt;
 
@@ -67,34 +56,46 @@ public final class UpdateChecker {
     }
 
     public void shutdown() {
-        executor.shutdownNow();
+        // 無常駐線程，不需關閉
     }
 
-    private CompletableFuture<Result> fetch() {
-        HttpRequest request = HttpRequest.newBuilder(URI.create(System.getProperty("vaultbank.update-api", "https://api.github.com/repos/" + REPO + "/releases/latest")))
-                .timeout(Duration.ofSeconds(10))
-                .header("Accept", "application/vnd.github+json")
-                .header("User-Agent", "VaultBank/" + current)
-                .GET()
-                .build();
-        return client.sendAsync(request, HttpResponse.BodyHandlers.ofString())
-                .thenApply(res -> {
-                    if (res.statusCode() == 404) {
-                        return failed("version.reason-no-release", "");
-                    }
-                    if (res.statusCode() != 200) {
-                        return failed("version.reason-http", String.valueOf(res.statusCode()));
-                    }
-                    JsonObject json = JsonParser.parseString(res.body()).getAsJsonObject();
-                    if (!json.has("tag_name")) {
-                        return failed("version.reason-no-tag", "");
-                    }
-                    String latest = strip(json.get("tag_name").getAsString());
-                    int cmp = compare(latest, strip(current));
-                    Status status = cmp > 0 ? Status.NEWER : cmp < 0 ? Status.DEV : Status.LATEST;
-                    return new Result(status, current, latest, null, null);
-                })
-                .exceptionally(t -> failed("version.reason-offline", ""));
+        private CompletableFuture<Result> fetch() {
+        return CompletableFuture.supplyAsync(() -> {
+            try {
+                String targetUrl = System.getProperty("vaultbank.update-api", "https://api.github.com/repos/" + REPO + "/releases/latest");
+                java.net.URI uri = java.net.URI.create(targetUrl);
+                java.net.HttpURLConnection conn = (java.net.HttpURLConnection) uri.toURL().openConnection();
+                conn.setConnectTimeout(10000);
+                conn.setReadTimeout(10000);
+                conn.setRequestProperty("Accept", "application/vnd.github+json");
+                conn.setRequestProperty("User-Agent", "VaultBank/" + this.current);
+                int code = conn.getResponseCode();
+                if (code == 404) {
+                    conn.disconnect();
+                    return failed("version.reason-no-release", "");
+                }
+                if (code != 200) {
+                    conn.disconnect();
+                    return failed("version.reason-http", String.valueOf(code));
+                }
+                String body;
+                try (java.io.InputStream in = conn.getInputStream()) {
+                    body = new String(in.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+                } finally {
+                    conn.disconnect();
+                }
+                JsonObject json = JsonParser.parseString(body).getAsJsonObject();
+                if (!json.has("tag_name")) {
+                    return failed("version.reason-no-tag", "");
+                }
+                String latest = strip(json.get("tag_name").getAsString());
+                int cmp = compare(latest, strip(this.current));
+                Status status = cmp > 0 ? Status.NEWER : cmp < 0 ? Status.DEV : Status.LATEST;
+                return new Result(status, this.current, latest, null, null);
+            } catch (Exception t) {
+                return failed("version.reason-offline", "");
+            }
+        });
     }
 
     private Result failed(String key, String arg) {
