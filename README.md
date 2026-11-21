@@ -1,6 +1,6 @@
 # VaultBank
 
-VaultBank 是一款專為 Paper 伺服器設計的經濟插件。除了一般的銀行餘額、轉帳與排行榜，還支援**多幣種**與**幣種兌換**，並加入中世紀風格的**實體貨幣**（硬幣與鈔票）和**不記名支票**：玩家可以把餘額提領成物品拿去交易、放進箱子、賣給商店，再到銀行存回來。每一枚貨幣都有伺服器簽章，玩家無法偽造。
+VaultBank 是一款專為 Paper 26.3 (標準穩定版) 伺服器設計的經濟插件。除了一般的銀行餘額、轉帳與排行榜，還支援**多幣種**與**幣種兌換**，並加入中世紀風格的**實體貨幣**（硬幣與鈔票）和**不記名支票**：玩家可以把餘額提領成物品拿去交易、放進箱子、賣給商店，再到銀行存回來。每一枚貨幣都有伺服器簽章，玩家無法偽造。
 
 ## 功能特性
 
@@ -127,7 +127,7 @@ currencies:
 
 # VaultBank
 
-VaultBank is an economy plugin for Paper and a drop-in replacement for TheosisEconomy. Besides bank balances, payments and a leaderboard, it adds medieval-style **physical money** (coins and banknotes) and **bearer cheques**: players can withdraw their balance as items, trade them, store them in chests or sell them to shops, then deposit them back at the bank. Every coin carries a server signature, so players cannot forge money.
+VaultBank is an economy plugin for Paper 26.3 (標準穩定版) and a drop-in replacement for TheosisEconomy. Besides bank balances, payments and a leaderboard, it adds medieval-style **physical money** (coins and banknotes) and **bearer cheques**: players can withdraw their balance as items, trade them, store them in chests or sell them to shops, then deposit them back at the bank. Every coin carries a server signature, so players cannot forge money.
 
 ## Features
 

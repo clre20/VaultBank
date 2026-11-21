@@ -169,7 +169,11 @@ public final class VaultBank extends JavaPlugin implements Listener {
                 getLogger().warning("PlaceholderAPI 變數註冊失敗：" + t);
             }
         }
-        updateNotifier.checkOnStartup();
+        if (getServer().getPluginManager().isPluginEnabled("HttpHub") && clre20.httpHub.api.HttpHubAPI.isAvailable()) {
+            clre20.httpHub.api.HttpHubAPI.registerUpdateCheck(this, "clre20/VaultBank", getPluginMeta().getVersion(), "vaultbank.version", null);
+        } else {
+            updateNotifier.checkOnStartup();
+        }
         getLogger().info(messages.console("enabled", "accounts", bank.size()));
     }
 

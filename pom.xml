@@ -84,7 +84,7 @@
         <dependency>
             <groupId>io.papermc.paper</groupId>
             <artifactId>paper-api</artifactId>
-            <version>26.1.2.build.74-stable</version>
+            <version>26.3.build.249-stable</version>
             <scope>provided</scope>
         </dependency>
         <dependency>
@@ -106,9 +106,9 @@
             <scope>provided</scope>
         </dependency>
         <dependency>
-            <groupId>com.github.clre20</groupId>
+            <groupId>clre20</groupId>
             <artifactId>HttpHub</artifactId>
-            <version>v1.0.0</version>
+            <version>1.0.1</version>
             <scope>provided</scope>
         </dependency>
         <dependency>
